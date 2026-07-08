@@ -1,0 +1,2933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Champlain Glider</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #1a1233;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #game { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(20,10,50,.55);
+  }
+  #score {
+    position: absolute; top: max(10px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left));
+    font-size: clamp(22px, 4.5vh, 34px); font-weight: 800; letter-spacing: .5px;
+  }
+  #best {
+    position: absolute; top: max(10px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right));
+    font-size: clamp(13px, 2.6vh, 18px); font-weight: 600; opacity: .85; text-align: right;
+  }
+  #comboMsg {
+    position: absolute; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    font-size: clamp(14px, 3vh, 20px); font-weight: 700; opacity: 0;
+    transition: opacity .25s;
+  }
+  #feverBanner {
+    position: absolute; top: calc(max(12px, env(safe-area-inset-top)) + clamp(24px, 5vh, 34px)); left: 50%; transform: translateX(-50%);
+    font-size: clamp(16px, 3.4vh, 24px); font-weight: 800; letter-spacing: 2px;
+    color: #ffd76a; text-shadow: 0 0 14px rgba(255,190,60,.9), 0 1px 4px rgba(20,10,50,.55);
+    display: none;
+    animation: feverPulse .5s ease-in-out infinite alternate;
+  }
+  @keyframes feverPulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.08); } }
+  #nightWarn {
+    position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    font-size: clamp(13px, 2.8vh, 18px); font-weight: 700; color: #cfd6ff;
+    opacity: 0; transition: opacity .4s;
+  }
+  #boostWrap {
+    position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); left: max(16px, env(safe-area-inset-left));
+    width: clamp(120px, 22vw, 220px); height: clamp(14px, 2.6vh, 20px);
+    border-radius: 99px; border: 2px solid rgba(255,255,255,.55);
+    background: rgba(20,12,50,.35); overflow: hidden;
+  }
+  #boostFill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #ff9d3c, #ffd76a);
+    border-radius: 99px; transition: width .15s linear;
+  }
+  #boostWrap.ready { border-color: #ffd76a; box-shadow: 0 0 14px rgba(255,200,80,.8); animation: boostGlow .7s ease-in-out infinite alternate; }
+  @keyframes boostGlow { from { box-shadow: 0 0 8px rgba(255,200,80,.5); } to { box-shadow: 0 0 20px rgba(255,200,80,.95); } }
+  #boostTag {
+    position: absolute; bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(18px, 3.2vh, 26px)); left: max(16px, env(safe-area-inset-left));
+    font-size: clamp(10px, 1.9vh, 13px); font-weight: 800; letter-spacing: 1.5px; opacity: .85;
+  }
+  #nightWrap {
+    position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); right: max(16px, env(safe-area-inset-right));
+    width: clamp(120px, 22vw, 220px); height: clamp(14px, 2.6vh, 20px);
+    border-radius: 99px; border: 2px solid rgba(255,255,255,.55);
+    background: rgba(20,12,50,.35); overflow: hidden; direction: rtl;
+  }
+  #nightFill {
+    height: 100%; width: 0%;
+    background: linear-gradient(270deg, #2c2a68, #7d5ae0);
+    border-radius: 99px; transition: width .15s linear;
+  }
+  #nightWrap.close { border-color: #ff7d6a; box-shadow: 0 0 14px rgba(255,90,80,.75); animation: nightGlow .5s ease-in-out infinite alternate; }
+  #nightWrap.close #nightFill { background: linear-gradient(270deg, #8a2f4d, #ff6a5a); }
+  @keyframes nightGlow { from { box-shadow: 0 0 8px rgba(255,90,80,.45); } to { box-shadow: 0 0 18px rgba(255,90,80,.95); } }
+  #nightTag {
+    position: absolute; bottom: calc(max(14px, env(safe-area-inset-bottom)) + clamp(18px, 3.2vh, 26px)); right: max(16px, env(safe-area-inset-right));
+    font-size: clamp(10px, 1.9vh, 13px); font-weight: 800; letter-spacing: 1.5px; opacity: .85;
+  }
+
+  /* ---------- Panels ---------- */
+  .panel {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; color: #fff; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(24,14,54,.25), rgba(14,8,38,.6));
+    text-shadow: 0 2px 8px rgba(15,8,40,.7);
+    padding: 20px;
+  }
+  .panel.hidden { display: none; }
+  .panel h1 { font-size: clamp(30px, 8vh, 58px); font-weight: 900; letter-spacing: 1px; margin-bottom: 6px; }
+  .panel h2 { font-size: clamp(24px, 6.5vh, 44px); font-weight: 900; margin-bottom: 10px; }
+  .panel .sub { font-size: clamp(14px, 3vh, 19px); opacity: .92; margin-bottom: 16px; font-weight: 600; color: #ffd9a0; }
+  .panel .howto {
+    font-size: clamp(13px, 2.8vh, 17px); line-height: 1.55; opacity: .95; max-width: 560px; margin-bottom: 18px;
+  }
+  .panel .stats { font-size: clamp(16px, 3.4vh, 24px); font-weight: 700; margin-bottom: 6px; }
+  .panel .stats small { font-weight: 600; opacity: .8; font-size: .75em; }
+  .panel .newbest { color: #ffd76a; font-weight: 800; font-size: clamp(15px, 3.2vh, 22px); margin-bottom: 10px; }
+  .panel .prompt {
+    font-size: clamp(14px, 3vh, 19px); font-weight: 700; margin-top: 10px;
+    animation: promptPulse 1.4s ease-in-out infinite;
+  }
+  .panel .goal {
+    font-size: clamp(12px, 2.6vh, 16px); font-weight: 700; color: #ffd76a; margin-bottom: 8px;
+  }
+  .panel .daily {
+    font-size: clamp(11px, 2.2vh, 14px); font-weight: 600; opacity: .75; margin-bottom: 14px;
+  }
+  #birdRow { display: flex; gap: 10px; margin-bottom: 16px; pointer-events: auto; }
+  .birdChip {
+    padding: 8px 14px; border-radius: 99px; border: 2px solid rgba(255,255,255,.4);
+    background: rgba(20,12,50,.35); font-weight: 800; font-size: clamp(12px, 2.6vh, 16px);
+    cursor: pointer; transition: transform .12s, border-color .12s;
+  }
+  .birdChip.sel { border-color: #ffd76a; box-shadow: 0 0 12px rgba(255,200,80,.6); transform: scale(1.08); }
+
+  /* ---------- Postcard summary ---------- */
+  #postcard {
+    position: relative;
+    background: #f6efdd; color: #4a3b2a;
+    border: 3px solid #d9c9a8; border-radius: 8px;
+    padding: 12px 18px 10px; margin: 10px 0 12px;
+    text-shadow: none; text-align: left;
+    min-width: min(340px, 78vw);
+    box-shadow: 0 6px 20px rgba(20,10,40,.35);
+    transform: rotate(-1.2deg);
+  }
+  #pcHead { font-weight: 900; font-size: clamp(15px, 3.2vh, 21px); color: #8a2f2f; margin-bottom: 6px; }
+  .pcRow { display: flex; justify-content: space-between; gap: 24px; font-size: clamp(12px, 2.4vh, 15px); font-weight: 600; padding: 1px 0; }
+  .pcRow b { font-weight: 800; }
+  #pcStamp {
+    position: absolute; top: 8px; right: 10px;
+    width: 34px; height: 40px; border: 2px dashed #b09a6f; border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 13px; color: #2e7d4f; transform: rotate(4deg);
+    background: #fdf8ea;
+  }
+
+  /* ---------- Leaderboard ---------- */
+  #lb { pointer-events: auto; width: min(360px, 80vw); text-align: center; }
+  #lbTabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 6px; }
+  .lbTab {
+    padding: 4px 12px; border-radius: 99px; font-size: clamp(11px, 2.2vh, 14px); font-weight: 800;
+    border: 2px solid rgba(255,255,255,.35); cursor: pointer; opacity: .7;
+  }
+  .lbTab.sel { border-color: #ffd76a; opacity: 1; }
+  #lbList { font-size: clamp(12px, 2.4vh, 15px); font-weight: 600; line-height: 1.55; min-height: 40px; }
+  .lbRow { display: flex; gap: 10px; justify-content: center; }
+  .lbRow.me { color: #ffd76a; font-weight: 800; }
+  .lbRow .rk { width: 26px; text-align: right; opacity: .8; }
+  .lbRow .nm { width: 150px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lbRow .sc { width: 70px; text-align: right; }
+  #lbYou { font-size: clamp(12px, 2.4vh, 15px); font-weight: 800; color: #ffd76a; margin-top: 4px; }
+  #lbNameForm { margin-top: 8px; display: flex; gap: 8px; justify-content: center; }
+  #lbNameForm.hidden, #lbRename.hidden { display: none; }
+  #lbName {
+    padding: 6px 12px; border-radius: 99px; border: 2px solid rgba(255,255,255,.5);
+    background: rgba(20,12,50,.45); color: #fff; font-weight: 700; font-size: 14px; width: 150px; outline: none;
+  }
+  #lbSave, #lbRename {
+    padding: 6px 14px; border-radius: 99px; border: 2px solid #ffd76a;
+    background: rgba(255,200,80,.18); color: #ffd76a; font-weight: 800; font-size: 13px; cursor: pointer;
+  }
+  #lbRename { margin-top: 6px; opacity: .8; }
+  .brief { margin-top: 12px; font-size: clamp(11px, 2.2vh, 13px); opacity: .85; pointer-events: auto; }
+  .brief a { color: #ffd9a0; font-weight: 800; }
+  @keyframes promptPulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+  /* ---------- Rotate hint (portrait touch devices) ---------- */
+  #rotate {
+    position: absolute; inset: 0; z-index: 20;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    background: #221647; color: #fff; text-align: center; padding: 24px;
+    font-size: 18px; font-weight: 700; line-height: 1.5;
+  }
+  #rotate .phone { font-size: 52px; margin-bottom: 14px; display: inline-block; animation: spinPhone 1.6s ease-in-out infinite; }
+  @keyframes spinPhone { 0%,20% { transform: rotate(0deg);} 60%,100% { transform: rotate(90deg);} }
+  @media (orientation: portrait) and (pointer: coarse) {
+    #rotate { display: flex; }
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="c"></canvas>
+  <div id="hud">
+    <div id="score">0</div>
+    <div id="best">BEST 0</div>
+    <div id="comboMsg"></div>
+    <div id="feverBanner">FEVER x2</div>
+    <div id="nightWarn">The night is closing in. Slide fast!</div>
+    <div id="boostTag">BOOST</div>
+    <div id="boostWrap"><div id="boostFill"></div></div>
+    <div id="nightTag">NIGHT</div>
+    <div id="nightWrap"><div id="nightFill"></div></div>
+  </div>
+  <div id="menu" class="panel">
+    <h1>Champlain Glider</h1>
+    <div class="sub">A Burlington sunset run</div>
+    <div class="howto">
+      Hold to fold your wings and dive. Release to soar.<br>
+      Land on the downhill side of a hill for a perfect slide.<br>
+      Three perfect slides in a row starts Fever and doubles your score.<br>
+      Grab maple coins to fill your boost, then double tap to fire it.<br>
+      Race rival birds to the flag. Keep an eye on the night bar.<br>
+      Perfect slides push the night back. Do not let it catch you.
+    </div>
+    <div id="birdRow">
+      <div class="birdChip" data-bird="cardinal">Cardinal</div>
+      <div class="birdChip" data-bird="jay">Blue Jay</div>
+      <div class="birdChip" data-bird="owl">Snowy Owl</div>
+      <div class="birdChip" data-bird="thrush">Hermit Thrush</div>
+    </div>
+    <div class="goal" id="goalMenu"></div>
+    <div class="daily" id="dailyMenu"></div>
+    <div class="prompt">Hold anywhere to fly</div>
+    <div class="brief">A Btown Games production &middot; <a href="https://www.btownbrief.com" target="_blank" rel="noopener">Read the Btown Brief</a></div>
+  </div>
+  <div id="over" class="panel hidden">
+    <h2>The night caught you</h2>
+    <div class="stats" id="overScore">0 <small>points</small></div>
+    <div id="postcard">
+      <div id="pcStamp">VT</div>
+      <div id="pcHead">Greetings from Burlington!</div>
+      <div class="pcRow"><span>Distance</span><b id="pcDist">0 m</b></div>
+      <div class="pcRow"><span>Towns visited</span><b id="pcTowns">0</b></div>
+      <div class="pcRow"><span>Rivals passed</span><b id="pcRivals">0</b></div>
+      <div class="pcRow"><span>Best slide chain</span><b id="pcCombo">0</b></div>
+      <div class="pcRow"><span>Maple coins</span><b id="pcCoins">0</b></div>
+    </div>
+    <div class="newbest" id="overBest"></div>
+    <div class="goal" id="goalOver"></div>
+    <div id="lb">
+      <div id="lbTabs">
+        <span class="lbTab sel" data-off="0">This month</span>
+        <span class="lbTab" data-off="-1">Last month</span>
+      </div>
+      <div id="lbList"></div>
+      <div id="lbYou"></div>
+      <div id="lbNameForm" class="hidden">
+        <input id="lbName" maxlength="20" placeholder="Your name">
+        <button id="lbSave">Save</button>
+      </div>
+      <button id="lbRename" class="hidden">Rename</button>
+    </div>
+    <div class="prompt">Hold to fly again</div>
+    <div class="brief">A Btown Games production &middot; <a href="https://www.btownbrief.com" target="_blank" rel="noopener">Read the Btown Brief</a></div>
+  </div>
+  <div id="rotate">
+    <span class="phone">&#128241;</span>
+    Turn your phone sideways to glide
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   TUNE: every gameplay and feel number lives here
+   ===================================================================== */
+const TUNE = {
+  // ----- View / camera -----
+  view: {
+    virtualHeight: 820,     // world pixels mapped to screen height at zoom 1
+    anchorX: 0.26,          // owl's horizontal position on screen (fraction of width)
+    anchorY: 0.30,          // camera vertical anchor reference
+    birdLow: 0.33,          // owl sits here (screen fraction) when on the ground...
+    birdHigh: 0.18,         // ...and rises toward here on big flights (tight band, ~5 bird heights)
+    birdHighAlt: 2400,      // altitude over which that shift happens
+    altSmooth: 2.2,         // how slowly the framing altitude follows the real one
+    spdSmooth: 1.5,         // how slowly the zoom's speed input follows real speed
+    camSmooth: 7,           // one smoothing rate for the whole camera position: no second channel to fight it
+    zoomOutAtSpeed: 3400,   // speed at which camera reaches max zoom-out
+    zoomMin: 0.84,          // max zoom-out factor from speed alone
+    zoomLerp: 0.9,          // base zoom rate (per second); scales up gently only for big errors
+    groundMargin: 0.94,     // keep the ground at or above this screen fraction
+    owlTopMargin: 0.05,     // never push the owl above this screen fraction
+  },
+
+  // ----- Vermont terrain zones: a tour of the whole state -----
+  // Each zone is a town or geography with its own hills and ground colors (col: [ridge, meadow]).
+  zones: {
+    minKeys: 8, maxKeys: 15,
+    types: {
+      valley:  { w: 0.06, name: 'Champlain Valley',    ampMul: 0.75, spaceMul: 1.2,  drift: 0, len: [3, 6],
+                 col: [[196, 214, 150], [124, 158, 112]] },
+      farms:   { w: 0.05, name: 'The Intervale',       ampMul: 0.70, spaceMul: 1.25, drift: 0, rumble: true, len: [3, 5],
+                 col: [[224, 202, 138], [164, 146, 96]] },
+      rolling: { w: 0.16, name: 'Sugarbush Hills',     ampMul: 1.0,  spaceMul: 1.0,  drift: 0,
+                 col: [[168, 198, 128], [104, 142, 96]] },
+      greens:  { w: 0.15, name: 'Green Mountains',     ampMul: 1.4,  spaceMul: 1.2,  drift: 0, kicker: true,
+                 col: [[120, 156, 116], [66, 104, 84]] },
+      stowe:   { w: 0.10, name: 'Stowe in October',    ampMul: 1.15, spaceMul: 1.05, drift: 0,
+                 col: [[236, 172, 92], [178, 112, 66]] },
+      kingdom: { w: 0.10, name: 'Northeast Kingdom',   ampMul: 1.35, spaceMul: 0.9,  drift: 0,
+                 col: [[100, 130, 100], [54, 84, 68]] },
+      longrun: { w: 0.23, name: 'The Long Trail Down', ampMul: 0.55, spaceMul: 1.0,  drift: 85, len: [12, 20], kicker: true,
+                 col: [[244, 246, 250], [188, 198, 218]] },
+      gorge:   { w: 0.09, name: 'Quechee Gorge',       ampMul: 1.55, spaceMul: 0.85, drift: 0,
+                 col: [[186, 178, 168], [126, 118, 114]] },
+      lake:    { w: 0.06, name: 'Champlain on Ice',    ampMul: 0.10, spaceMul: 1.5,  drift: 0, ice: true, len: [4, 6],
+                 col: [[216, 236, 246], [148, 184, 212]] },
+    },
+    blend: 900,             // px over which ground colors fade between zones
+    jitter: 0.5,            // per-key random variation of spacing and amplitude (fraction)
+    plateauChance: 0.05,    // chance a key repeats the last height (breaks the up-down rhythm)
+    kickerHeight: 520,      // how far above the baseline a Long Trail end ramp rises (over two wide keys)
+    rumbleChance: 0.35,     // chance an Intervale key carries rumble strips (short patches, not walls)
+    rumbleAmp: 10,          // rumble strip ripple height
+    rumbleFreq: 0.045,      // rumble strip ripple frequency (per px)
+  },
+
+  // ----- Sky and lake life -----
+  sky: {
+    cloudChance: 1.0,       // chance per keypoint to spawn a cloud
+    cloudSecond: 0.65,      // chance of a second cloud at that keypoint
+    cloudLow: 500,          // clouds float this far above the hills...
+    cloudHigh: 3800,        // ...up to this far (get up here and you are flying)
+    balloonEvery: 16,       // a hot air balloon roughly every N keypoints (they are bouncy: aim for them)
+    paraEvery: 41,          // a paraglider roughly every N keypoints
+    flockEvery: 17,         // a flock of small birds roughly every N keypoints
+    sunShowAlt: 900,        // the sun only appears above this altitude...
+    sunFullAlt: 1800,       // ...and is fully out by this one
+    champMeanWait: 16,      // Champ surfaces in the lake about this often (seconds)
+    travelerWait: [18, 40], // seconds between fellow birds passing through
+    creemeeEvery: 44,       // a creemee stand roughly every N keypoints
+    fireflyDark: 0.45,      // fireflies come out past this darkness
+    fireflyRate: 9,         // fireflies per second when out
+  },
+
+  // ----- Coins and the double-tap boost -----
+  coins: {
+    chance: 0.38,           // chance per keypoint of a coin trail on the slope
+    arcChance: 0.16,        // chance per keypoint of a high coin arc instead
+    n: 6,                   // coins per trail
+    value: 25,              // points per coin (doubled in Fever)
+    radius: 80,             // pickup distance
+  },
+  // ----- Rivals: named birds that fly the same route, like live players -----
+  rival: {
+    wait: [7, 16],          // seconds between new rivals showing up
+    stamina: [55, 130],     // how long each rival hangs with you (seconds)
+    band: 1000,             // rubber band: rivals stay within about this many px of you
+    passBonus: 800,         // points every time you overtake one
+    passCooldown: 7,        // seconds between pass bonuses per rival
+  },
+  boost: {
+    tapWindow: 280,         // ms between taps to count as a double tap
+    impulse: 700,           // speed added along your heading
+    upKick: 420,            // extra upward kick if boosted on the ground
+    coinFill: 0.09,         // meter fill per coin
+    perfectFill: 0.22,      // meter fill per perfect slide
+    cloudFill: 0.05,        // meter fill per cloud touched
+  },
+
+  // ----- Terrain (keypoints + cosine interpolation) -----
+  hill: {
+    spacing: 470,           // base horizontal distance between keypoints (px): wide, lateral hills
+    spacingRamp: 0.8,       // extra spacing per keypoint index
+    maxSpacing: 720,
+    amp: 92,                // base hill amplitude (px)
+    ampRamp: 0.6,           // extra amplitude per keypoint index
+    maxAmp: 205,
+    globalDrift: 55,        // the whole state slopes downhill: px of descent per keypoint, every zone
+    warmupKeys: 8,          // first hills are gentler over this many keypoints
+    aheadPad: 2200,         // generate terrain this far past the right edge
+    behindPad: 2400,        // keep terrain this far behind camera / dusk
+  },
+
+  // ----- Physics (point mass, ballistic + slope projection) -----
+  phys: {
+    gravity: 640,           // px/s^2 while soaring: floaty but not weightless
+    glideSink: 480,         // releasing flares the wings: fall speed bleeds toward this...
+    glideFlare: 2.4,        // ...at this rate (per second), so letting go instantly lets up
+    diveForward: 0.09,      // holding also pushes you forward (this fraction of dive gravity)
+    maxDiveVy: 2000,        // terminal dive speed: keeps landing angles saveable
+    minAirVx: 340,          // horizontal speed never dies, even in the air (flow never stops)
+    crestPop: 1.3,          // upward velocity multiplier when launching off a crest
+    crestPopMinVy: 180,     // need at least this much upward speed to earn the pop
+    crestPopCooldown: 1.2,  // seconds between pops (no free energy from skims)
+    diveGravity: 6400,      // px/s^2 while holding (wings folded), at the reference speed
+    diveScaleRef: 900,      // dive gravity scales with (vx / this)^2 so dives stay steep at speed
+    diveScaleMax: 3.8,      // cap on that scaling factor
+    startSpeed: 1350,       // initial speed along the first downslope
+    minGroundSpeed: 860,    // owl never stalls below this on the ground
+    maxSpeed: 3350,         // hard speed cap
+    groundFriction: 0.015,  // fraction of speed lost per second on the ground
+    landingKeep: 0.35,      // fraction of pre-landing speed carried through a landing (flow saver)
+    substeps: 4,            // physics substeps per frame
+    maxFrameDt: 0.05,       // clamp frame dt (tab switches, hiccups)
+  },
+
+  // ----- Perfect slides / Fever -----
+  perfect: {
+    minSlope: 0.12,         // landing slope (dy/dx) must exceed this: just past the crest counts
+    align: 0.55,            // dot(velocityDir, slopeDir) must exceed this (generous, like the original)
+    minSpeed: 300,          // landing speed must exceed this
+    graceAir: 0.12,         // touches after less air time than this neither score nor break the combo
+    speedBoost: 1.12,       // speed multiplier on a perfect slide
+    flatBoost: 170,         // flat speed bonus on a perfect slide
+    bonus: 100,             // points per perfect (times combo, doubled in Fever)
+    feverAt: 3,             // combo needed to enter Fever
+    slamAlign: 0.30,        // below this alignment the landing is a hard slam
+    slamPenalty: 0.68,      // speed kept after a hard slam
+  },
+
+  // ----- Score -----
+  score: {
+    perPixel: 0.02,         // distance points per world pixel traveled
+    feverMult: 2,           // score multiplier during Fever
+  },
+
+  // ----- Dusk chase (simplified night mechanic) -----
+  dusk: {
+    startGap: 1200,         // starting gap between owl and the night (px)
+    baseSpeed: 560,         // night speed floor (px/s)
+    maxSpeed: 2800,         // night speed cap
+    matchStart: 0.86,       // the night paces itself to YOUR speed: this fraction early on...
+    matchEnd: 1.5,          // ...rising well past your pace as the run goes long
+    matchRamp: 240,         // seconds to go from matchStart to matchEnd
+    matchEase: 0.35,        // how quickly the night adjusts to your pace (per second)
+    damping: 0.7,           // the night slows to this fraction as it closes in, so the
+    dampGap: 1000,          //   almost-caught sweat lasts; full speed beyond this gap
+    maxGap: 1150,           // rubber band: the night is always nipping at your heels
+    pushback: 420,          // px the night is pushed back per perfect slide
+    feverPushback: 650,     // pushback during Fever
+    warnGap: 1500,          // sky starts darkening inside this gap
+    panicGap: 300,          // red alert only when the night is truly about to catch you
+    fadeOut: 1.6,           // seconds for night to swallow the screen on game over
+  },
+
+  // ----- Owl -----
+  owl: { radius: 24 },
+
+  // ----- Ambient effects -----
+  fx: {
+    maxParticles: 260,
+    snowRate: 26,           // ambient snowflakes per second
+    feverTrailRate: 60,     // gold sparkles per second in Fever
+  },
+};
+
+/* =====================================================================
+   Setup
+   ===================================================================== */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const el = {
+  score: document.getElementById('score'),
+  best: document.getElementById('best'),
+  comboMsg: document.getElementById('comboMsg'),
+  fever: document.getElementById('feverBanner'),
+  warn: document.getElementById('nightWarn'),
+  menu: document.getElementById('menu'),
+  over: document.getElementById('over'),
+  overScore: document.getElementById('overScore'),
+  overDist: document.getElementById('overDist'),
+  overBest: document.getElementById('overBest'),
+  boostWrap: document.getElementById('boostWrap'),
+  boostFill: document.getElementById('boostFill'),
+  nightWrap: document.getElementById('nightWrap'),
+  nightFill: document.getElementById('nightFill'),
+  goalMenu: document.getElementById('goalMenu'),
+  goalOver: document.getElementById('goalOver'),
+  dailyMenu: document.getElementById('dailyMenu'),
+  pcHead: document.getElementById('pcHead'),
+  pcDist: document.getElementById('pcDist'),
+  pcTowns: document.getElementById('pcTowns'),
+  pcRivals: document.getElementById('pcRivals'),
+  pcCombo: document.getElementById('pcCombo'),
+  pcCoins: document.getElementById('pcCoins'),
+  lb: document.getElementById('lb'),
+  lbList: document.getElementById('lbList'),
+  lbYou: document.getElementById('lbYou'),
+  lbNameForm: document.getElementById('lbNameForm'),
+  lbName: document.getElementById('lbName'),
+  lbSave: document.getElementById('lbSave'),
+  lbRename: document.getElementById('lbRename'),
+};
+
+// ----- Leaderboard UI -----
+let lbOffset = 0, lbPendingScore = 0;
+async function loadBoard() {
+  el.lbList.textContent = 'Loading...';
+  el.lbYou.textContent = '';
+  try {
+    const rows = await fetchTop(lbOffset);
+    if (!rows.length) { el.lbList.textContent = 'No flights yet'; return; }
+    const me = playerId();
+    el.lbList.innerHTML = rows.slice(0, 10).map((r, i) =>
+      '<div class="lbRow' + (r.player_id === me ? ' me' : '') + '"><span class="rk">' + (i + 1) +
+      '.</span><span class="nm">' + escapeHtml(r.name) + '</span><span class="sc">' +
+      Number(r.score).toLocaleString() + '</span></div>').join('');
+    const idx = rows.findIndex((r) => r.player_id === me);
+    if (idx >= 0) el.lbYou.textContent = 'You are #' + (idx + 1) + ' of ' + rows.length;
+  } catch (e) {
+    el.lbList.textContent = 'Leaderboard unavailable';
+  }
+}
+async function lbAfterRun(score) {
+  if (!lbEnabled()) { el.lb.style.display = 'none'; return; }
+  lbPendingScore = Math.floor(score);
+  if (getName()) {
+    el.lbNameForm.classList.add('hidden');
+    el.lbRename.classList.remove('hidden');
+    try { await submitScore(lbPendingScore); } catch (e) {}
+  } else {
+    el.lbNameForm.classList.remove('hidden');
+    el.lbRename.classList.add('hidden');
+  }
+  loadBoard();
+}
+el.lb.addEventListener('pointerdown', (e) => e.stopPropagation());
+el.lb.addEventListener('pointerup', (e) => e.stopPropagation());
+document.querySelectorAll('.brief').forEach((b) => {
+  b.addEventListener('pointerdown', (e) => e.stopPropagation());
+  b.addEventListener('pointerup', (e) => e.stopPropagation());
+});
+el.lbSave.addEventListener('click', async () => {
+  const n = el.lbName.value.trim();
+  if (!n) return;
+  const had = !!getName();
+  setName(n);
+  el.lbNameForm.classList.add('hidden');
+  el.lbRename.classList.remove('hidden');
+  try {
+    if (had) await renamePlayer(n);
+    await submitScore(lbPendingScore);
+  } catch (e) {}
+  loadBoard();
+});
+el.lbRename.addEventListener('click', () => {
+  el.lbName.value = getName();
+  el.lbNameForm.classList.remove('hidden');
+  el.lbRename.classList.add('hidden');
+});
+document.querySelectorAll('.lbTab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    lbOffset = parseInt(tab.dataset.off, 10) || 0;
+    document.querySelectorAll('.lbTab').forEach((t2) => t2.classList.toggle('sel', t2 === tab));
+    loadBoard();
+  });
+});
+
+// Everyone flies the same route each day: terrain randomness is date-seeded
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const today = new Date();
+const daySeed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+
+/* =====================================================================
+   Monthly leaderboard: the shared Btown Games Supabase
+   ===================================================================== */
+const SUPABASE_URL = 'https://jnouvwxomrcffqwilqkq.supabase.co/';
+const SUPABASE_ANON_KEY = 'sb_publishable_RkMJQopffWlV6DSwCRkndQ_Xw6GJMf3';
+const GAME = 'champlain-glider';
+function lbEnabled() { return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY); }
+function lbStored(key, make) {
+  let v = localStorage.getItem(key);
+  if (!v) { v = make(); localStorage.setItem(key, v); }
+  return v;
+}
+function playerId() { return lbStored('btown-player-id', () => crypto.randomUUID()); }
+function playerToken() {
+  return lbStored('btown-player-token', () =>
+    [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join(''));
+}
+function getName() { return localStorage.getItem('btown-player-name') || ''; }
+function setName(n) { localStorage.setItem('btown-player-name', n.trim().slice(0, 20)); }
+async function lbRpc(fn, args) {
+  const headers = { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' };
+  if (SUPABASE_ANON_KEY.startsWith('eyJ')) headers.Authorization = 'Bearer ' + SUPABASE_ANON_KEY;
+  const res = await fetch(SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/rpc/' + fn, {
+    method: 'POST', headers, body: JSON.stringify(args),
+  });
+  if (!res.ok) throw new Error(fn + ' failed: ' + res.status);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+function monthKey(offset = 0) {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + offset);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+async function submitScore(score) {
+  if (!lbEnabled() || !getName() || score <= 0) return;
+  await lbRpc('submit_score', {
+    p_game: GAME, p_player: playerId(), p_token: playerToken(),
+    p_name: getName(), p_score: Math.floor(score),
+  });
+}
+async function renamePlayer(name) {
+  setName(name);
+  if (!lbEnabled()) return;
+  await lbRpc('rename_player', { p_player: playerId(), p_token: playerToken(), p_name: getName() });
+}
+async function fetchTop(monthOffset = 0) {
+  if (!lbEnabled()) return [];
+  return (await lbRpc('get_leaderboard', { p_game: GAME, p_month: monthKey(monthOffset) })) || [];
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* =====================================================================
+   Sound: tiny WebAudio synth, no assets
+   ===================================================================== */
+let AC = null, MASTER = null;
+function initAudio() {
+  if (!AC) {
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      // Everything runs through a compressor so no sound can ever bang or spike
+      const comp = AC.createDynamicsCompressor();
+      comp.threshold.value = -22; comp.knee.value = 18; comp.ratio.value = 8;
+      comp.attack.value = 0.004; comp.release.value = 0.2;
+      MASTER = AC.createGain();
+      MASTER.gain.value = 0.85;
+      MASTER.connect(comp); comp.connect(AC.destination);
+    } catch (e) { AC = null; MASTER = null; }
+  }
+  if (AC && AC.state === 'suspended') AC.resume();
+  makeLoops();
+}
+function out() { return MASTER || AC.destination; }
+function tone(f0, f1, dur, type, vol, delay) {
+  if (!AC) return;
+  const t0 = AC.currentTime + (delay || 0);
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t0);
+  o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(out());
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+let lastCoinSfx = 0;
+function sfxCoin() {
+  const now = performance.now();
+  if (now - lastCoinSfx < 80) return;
+  lastCoinSfx = now;
+  tone(880, 1250, 0.09, 'sine', 0.055);
+}
+function sfxPerfect() { tone(620, 860, 0.2, 'sine', 0.07); }
+function sfxFever() { tone(523, 523, 0.12, 'sine', 0.06); tone(659, 659, 0.12, 'sine', 0.06, 0.1); tone(784, 784, 0.2, 'sine', 0.07, 0.2); }
+function sfxBoost() {
+  if (!AC) return;
+  // Whoosh: filtered noise sweep under a rising tone
+  const dur = 0.45, t0 = AC.currentTime;
+  const buf = AC.createBuffer(1, AC.sampleRate * dur, AC.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  const src = AC.createBufferSource(); src.buffer = buf;
+  const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(350, t0);
+  bp.frequency.exponentialRampToValueAtTime(2600, t0 + dur * 0.8);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(0.16, t0 + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(bp); bp.connect(g); g.connect(out());
+  src.start(t0); src.stop(t0 + dur);
+  tone(240, 880, 0.4, 'sine', 0.05);
+  tone(660, 1320, 0.3, 'sine', 0.06, 0.05);
+}
+function sfxNight() { tone(300, 90, 1.2, 'sine', 0.1); }
+function sfxWhee() {
+  if (!AC) return;
+  // A soft gleeful rising note for big air (gentle: no screech)
+  const t0 = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(480, t0);
+  o.frequency.exponentialRampToValueAtTime(920, t0 + 0.4);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(0.05, t0 + 0.1);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.55);
+  o.connect(g); g.connect(out());
+  o.start(t0); o.stop(t0 + 0.6);
+}
+
+// No noise beds: the soundscape is just the music and discrete effects
+function makeLoops() {}
+function updateAudio(dt) {
+  if (!AC) return;
+  updateMusic();
+}
+
+// A tiny generative folk waltz: plucked bass-strum-strum, ducking as night nears
+let musicNext = 0, musicStep = 0;
+const CHORDS = [
+  [349.23, 440.00, 523.25],  // F
+  [293.66, 349.23, 440.00],  // Dm
+  [233.08, 293.66, 349.23],  // Bb
+  [261.63, 329.63, 392.00],  // C
+];
+const MELODY = [349.23, 392.00, 440.00, 523.25, 587.33];
+function pluck(f, at, vol) {
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'triangle';
+  o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.linearRampToValueAtTime(vol, at + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + 0.55);
+  o.connect(g); g.connect(out());
+  o.start(at); o.stop(at + 0.6);
+}
+function updateMusic() {
+  const beat = 60 / 138;
+  if (!musicNext || musicNext < AC.currentTime - 1) musicNext = AC.currentTime + 0.05;
+  const duck = (state === STATE.OVER ? 0.4 : 1) * (1 - run.darkness * 0.55);
+  while (musicNext < AC.currentTime + 0.3) {
+    const b = musicStep % 3;
+    const chord = CHORDS[Math.floor(musicStep / 3) % CHORDS.length];
+    if (b === 0) {
+      pluck(chord[0] / 2, musicNext, 0.055 * duck);
+    } else {
+      for (let n = 0; n < 3; n++) pluck(chord[n], musicNext + n * 0.028, 0.026 * duck);
+      if (b === 2 && Math.random() < 0.45) pluck(MELODY[Math.floor(Math.random() * MELODY.length)] * 2, musicNext + 0.05, 0.028 * duck);
+    }
+    musicNext += beat; musicStep++;
+  }
+}
+
+let W = 0, H = 0, DPR = 1;
+let stars = [];
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  stars = [];
+  const n = Math.round((W * H) / 9000);
+  for (let i = 0; i < n; i++) {
+    stars.push({ x: Math.random() * W, y: Math.random() * H * 0.62, r: Math.random() * 1.4 + 0.4, tw: Math.random() * 6.28 });
+  }
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+resize();
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// Color helper: pairs of [day, night] rgb triples, lerped by darkness
+function mix(c1, c2, t) {
+  return 'rgb(' + Math.round(lerp(c1[0], c2[0], t)) + ',' + Math.round(lerp(c1[1], c2[1], t)) + ',' + Math.round(lerp(c1[2], c2[2], t)) + ')';
+}
+const PAL = {
+  skyTop:    [[70, 110, 165], [8, 10, 38]],
+  skyMid:    [[236, 146, 96], [38, 28, 72]],
+  skyLow:    [[250, 200, 120], [66, 42, 88]],
+  mtnFar:    [[142, 110, 150], [30, 26, 60]],
+  mtnNear:   [[104, 78, 128], [22, 18, 48]],
+  lake:      [[226, 156, 110], [30, 30, 66]],
+  snowTop:   [[253, 250, 244], [132, 138, 190]],
+  snowLow:   [[196, 190, 224], [52, 54, 104]],
+  rim:       [[255, 214, 150], [130, 120, 200]],
+};
+
+/* =====================================================================
+   Terrain: keypoints + cosine interpolation
+   ===================================================================== */
+// What grows/stands on the hills in each zone: [type, weight] tables
+const DECOS = {
+  valley:  [['cow', 3], ['hay', 2.5], ['fence', 2.5], ['maple', 2]],
+  farms:   [['corn', 4], ['fence', 3], ['silo', 1.5], ['barn', 1.5]],
+  rolling: [['maple', 6], ['fence', 1.5], ['barn', 1], ['hay', 1.5]],
+  greens:  [['pine', 7], ['rock', 2], ['maple', 1]],
+  stowe:   [['mapleFall', 6.5], ['fence', 1], ['steeple', 1], ['hay', 1.5]],
+  kingdom: [['pine', 6.5], ['birch', 2], ['rock', 1], ['moose', 0.5]],
+  longrun: [['pineSnow', 5.5], ['lift', 2.5], ['rock', 2]],
+  gorge:   [['rock', 5], ['birch', 3], ['pine', 2]],
+  lake:    [['shanty', 3], ['birch', 1]],
+};
+const FLAT_ONLY = { barn: 1, silo: 1, steeple: 1, cow: 1, hay: 1, moose: 1 };
+
+const terrain = {
+  keys: [],        // [{x, y}] world coords, y-down
+  nextIndex: 0,    // index of the next keypoint to generate (for difficulty ramp)
+  baseline: 0,     // drifting base elevation (long descents push it down)
+  zone: null,      // current generator zone { type, left }
+  zoneMarks: [],   // [{x, name, type}] where each zone begins
+  clouds: [],
+  balloons: [],
+  decos: [],
+  rings: [],
+
+  pickZone() {
+    const types = TUNE.zones.types;
+    let r = this.rand(), pick = 'rolling';
+    for (const k in types) { r -= types[k].w; if (r <= 0) { pick = k; break; } }
+    const len = types[pick].len || [TUNE.zones.minKeys, TUNE.zones.maxKeys];
+    return { type: pick, left: len[0] + Math.floor(this.rand() * (len[1] - len[0])) };
+  },
+
+  reset() {
+    this.rand = mulberry32(daySeed);
+    this.keys = [{ x: -1400, y: -150 }];
+    this.nextIndex = 1;
+    this.baseline = 0;
+    this.zone = { type: 'rolling', left: 12 };
+    this.zoneMarks = [{ x: -1400, name: '', type: 'rolling' }];
+    this.clouds = [];
+    this.balloons = [];
+    this.coins = [];
+    this.flocks = [];
+    this.stands = [];
+    this.decos = [];
+    this.rings = [];
+  },
+
+  addDecos(x0, x1, zoneType) {
+    const table = DECOS[zoneType] || DECOS.rolling;
+    let total = 0;
+    for (const [, w] of table) total += w;
+    const n = 1 + (this.rand() < 0.8 ? 1 : 0) + (this.rand() < 0.3 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      let r = this.rand() * total, type = table[0][0];
+      for (const [t, w] of table) { r -= w; if (r <= 0) { type = t; break; } }
+      const dx = x0 + (0.12 + 0.76 * this.rand()) * (x1 - x0);
+      if (FLAT_ONLY[type] && Math.abs(this.slopeAt(dx)) > 0.28) type = zoneType === 'valley' || zoneType === 'farms' ? 'fence' : 'maple';
+      this.decos.push({ x: dx, type, size: 0.8 + this.rand() * 0.5, seed: this.rand() });
+    }
+  },
+
+  addKey() {
+    const i = this.nextIndex++;
+    const last = this.keys[this.keys.length - 1];
+    if (this.zone.left-- <= 0) {
+      this.zone = this.pickZone();
+      this.zoneMarks.push({ x: last.x, name: TUNE.zones.types[this.zone.type].name, type: this.zone.type });
+    }
+    const z = TUNE.zones.types[this.zone.type];
+    const jit = () => 1 - TUNE.zones.jitter / 2 + this.rand() * TUNE.zones.jitter;
+    // Flow secret from the original: hill wavelength scales with your speed so the
+    // press-and-release rhythm stays constant in TIME however fast you go.
+    // (Does not consume the seeded rand, so the daily route's shape stays intact.)
+    const flowStretch = clamp(spdSmoothed / 1500, 0.85, 1.9);
+    const spacing = Math.min(TUNE.hill.spacing + i * TUNE.hill.spacingRamp, TUNE.hill.maxSpacing) * z.spaceMul * jit() * flowStretch;
+    const warm = Math.min(1, i / TUNE.hill.warmupKeys);
+    const amp = Math.min(TUNE.hill.amp + i * TUNE.hill.ampRamp, TUNE.hill.maxAmp) * (0.4 + 0.6 * warm) * z.ampMul * jit() * Math.pow(flowStretch, 0.7);
+    this.baseline += z.drift + TUNE.hill.globalDrift;
+
+    let y, sp = spacing;
+    if (z.kicker && this.zone.left <= 1) {
+      // The Long Trail Down ends in a gradual two-step launch ramp, not a wall
+      const kh = TUNE.zones.kickerHeight * (0.85 + 0.3 * this.rand());
+      if (this.zone.left === 1) { y = this.baseline - kh * 0.42; sp = spacing * 1.5; }
+      else { y = this.baseline - kh; sp = spacing * 1.6; }
+    } else if (this.rand() < TUNE.zones.plateauChance) {
+      // Occasional plateau breaks the up-down rhythm
+      y = last.y + (this.rand() - 0.5) * 50;
+    } else {
+      // Alternate shallow valleys and peaks: the ride stays up, moving forward
+      y = this.baseline + ((i % 2 === 1)
+        ? amp * (0.40 + 0.35 * this.rand())
+        : -amp * (0.65 + 0.35 * this.rand()));
+    }
+    const x = last.x + sp;
+    this.keys.push({ x, y, rumble: !!z.rumble && this.rand() < TUNE.zones.rumbleChance });
+    this.addDecos(last.x, x, this.zone.type);
+
+    // Hoops to thread in the air
+    if (this.rand() < 0.30) {
+      this.rings.push({
+        x: x - sp * 0.4, y: y - 260 - this.rand() * 850,
+        r: 90, hit: false, spin: this.rand() * 6.28,
+      });
+    }
+
+    // A creemee stand on the occasional hilltop
+    if (i % TUNE.sky.creemeeEvery === 0 && i > 0 && i % 2 === 0) {
+      this.stands.push({ x, y: y - 8, taken: false });
+    }
+
+    // Coins: a trail hugging the new slope, or a high arc up with the clouds
+    const roll = this.rand();
+    if (roll < TUNE.coins.chance) {
+      for (let j = 0; j < TUNE.coins.n; j++) {
+        const t = 0.12 + 0.76 * j / (TUNE.coins.n - 1);
+        const c = (1 - Math.cos(Math.PI * t)) * 0.5;
+        this.coins.push({ x: last.x + sp * t, y: last.y + (y - last.y) * c - 150, taken: false, phase: Math.random() * 6.28 });
+      }
+    } else if (roll < TUNE.coins.chance + TUNE.coins.arcChance) {
+      const peak = 800 + Math.random() * 1200;
+      for (let j = 0; j < TUNE.coins.n; j++) {
+        const t = j / (TUNE.coins.n - 1);
+        this.coins.push({ x: last.x + sp * t, y: Math.min(last.y, y) - peak + Math.pow(t - 0.5, 2) * 4 * 300, taken: false, phase: Math.random() * 6.28 });
+      }
+    }
+
+    // Sky life spawns along with the land
+    const nClouds = (Math.random() < TUNE.sky.cloudChance ? 1 : 0) + (Math.random() < TUNE.sky.cloudSecond ? 1 : 0);
+    for (let c = 0; c < nClouds; c++) {
+      this.clouds.push({
+        x: x + (Math.random() - 0.5) * spacing * 1.4,
+        y: y - TUNE.sky.cloudLow - Math.random() * (TUNE.sky.cloudHigh - TUNE.sky.cloudLow),
+        w: 130 + Math.random() * 240, puff: Math.random() * 6.28, touched: false,
+      });
+    }
+    if (i % TUNE.sky.balloonEvery === 0 && i > 0) {
+      this.balloons.push({ kind: 'balloon', x: x + spacing, y: y - 550 - Math.random() * 750, bob: Math.random() * 6.28, hue: Math.random() < 0.5 });
+    }
+    if (i % TUNE.sky.paraEvery === 0 && i > 0) {
+      this.balloons.push({ kind: 'para', x: x + spacing * 0.5, y: y - 500 - Math.random() * 700, bob: Math.random() * 6.28, hue: Math.random() < 0.5 });
+    }
+    if (i % TUNE.sky.flockEvery === 0 && i > 0) {
+      this.flocks.push({ x: x + spacing, y: y - 350 - Math.random() * 900, vx: -60 - Math.random() * 60, n: 3 + Math.floor(Math.random() * 3), flap: Math.random() * 6.28 });
+    }
+  },
+
+  ensure(xMax) {
+    while (this.keys[this.keys.length - 1].x < xMax) this.addKey();
+  },
+
+  prune(xMin) {
+    while (this.keys.length > 2 && this.keys[1].x < xMin) this.keys.shift();
+    this.clouds = this.clouds.filter(c => c.x > xMin - 800);
+    this.balloons = this.balloons.filter(b => b.x > xMin - 400);
+    this.coins = this.coins.filter(c => c.x > xMin && !c.taken);
+    this.flocks = this.flocks.filter(f => f.x > xMin - 600);
+    this.stands = this.stands.filter(s => s.x > xMin - 300);
+    this.decos = this.decos.filter(dc => dc.x > xMin - 300);
+    this.rings = this.rings.filter(rg => rg.x > xMin - 200);
+    while (this.zoneMarks.length > 1 && this.zoneMarks[1].x < xMin - TUNE.zones.blend * 2) this.zoneMarks.shift();
+  },
+
+  // Ground colors at x: blends between zone palettes across boundaries
+  palAt(x) {
+    const marks = this.zoneMarks;
+    let idx = 0;
+    for (let m = marks.length - 1; m >= 0; m--) { if (marks[m].x <= x) { idx = m; break; } }
+    const cur = TUNE.zones.types[marks[idx].type].col;
+    if (idx === 0) return cur;
+    const t = clamp((x - marks[idx].x) / TUNE.zones.blend, 0, 1);
+    if (t >= 1) return cur;
+    const prev = TUNE.zones.types[marks[idx - 1].type].col;
+    return [
+      [lerp(prev[0][0], cur[0][0], t), lerp(prev[0][1], cur[0][1], t), lerp(prev[0][2], cur[0][2], t)],
+      [lerp(prev[1][0], cur[1][0], t), lerp(prev[1][1], cur[1][1], t), lerp(prev[1][2], cur[1][2], t)],
+    ];
+  },
+
+  segAt(x) {
+    const k = this.keys;
+    let lo = 0, hi = k.length - 2;
+    if (x <= k[0].x) return 0;
+    if (x >= k[hi + 1].x) return hi;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (k[mid].x <= x) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  },
+
+  heightAt(x) {
+    const k = this.keys, s = this.segAt(x);
+    const a = k[s], b = k[s + 1];
+    const t = clamp((x - a.x) / (b.x - a.x), 0, 1);
+    const c = (1 - Math.cos(Math.PI * t)) * 0.5;
+    let y = a.y + (b.y - a.y) * c;
+    if (a.rumble && b.rumble) y += TUNE.zones.rumbleAmp * Math.sin(x * TUNE.zones.rumbleFreq);
+    return y;
+  },
+
+  slopeAt(x) {
+    const k = this.keys, s = this.segAt(x);
+    const a = k[s], b = k[s + 1];
+    const t = clamp((x - a.x) / (b.x - a.x), 0, 1);
+    let m = (b.y - a.y) * Math.PI * Math.sin(Math.PI * t) / (2 * (b.x - a.x));
+    if (a.rumble && b.rumble) m += TUNE.zones.rumbleAmp * TUNE.zones.rumbleFreq * Math.cos(x * TUNE.zones.rumbleFreq);
+    return m;
+  },
+};
+
+/* =====================================================================
+   Game state
+   ===================================================================== */
+const STATE = { MENU: 0, PLAY: 1, OVER: 2, INTRO: 3 };
+let state = STATE.MENU;
+let holding = false;
+let introSeen = false, introT = 0;
+let overAt = 0;               // timestamp of game over (restart lockout)
+let lastHudScore = -1, lastHudBest = -1, lastCombo = -1, lastFever = null, lastWarn = null, lastBoostPct = -1, lastMult = -1, lastNightPct = -1;
+
+let best = 0;
+try { best = parseInt(localStorage.getItem('champlain_glider_best') || '0', 10) || 0; } catch (e) { best = 0; }
+
+// ----- Bird choice -----
+let birdKind = 'cardinal';
+try { birdKind = localStorage.getItem('champlain_glider_bird') || 'cardinal'; } catch (e) {}
+function refreshBirdChips() {
+  document.querySelectorAll('.birdChip').forEach(ch => {
+    const locked = ch.dataset.bird === 'thrush' && !thrushUnlocked();
+    ch.classList.toggle('sel', ch.dataset.bird === birdKind);
+    ch.style.opacity = locked ? '0.45' : '1';
+    if (ch.dataset.bird === 'thrush') ch.textContent = locked ? 'Locked: 5 goals' : 'Hermit Thrush';
+  });
+}
+document.querySelectorAll('.birdChip').forEach(ch => {
+  ch.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (ch.dataset.bird === 'thrush' && !thrushUnlocked()) return;
+    birdKind = ch.dataset.bird;
+    try { localStorage.setItem('champlain_glider_bird', birdKind); } catch (err) {}
+    refreshBirdChips();
+  });
+});
+el.dailyMenu.textContent = 'Today’s route: ' + today.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+
+// ----- Goals: each one completed raises your multiplier for good -----
+const GOALS = [
+  { text: 'Grab 12 maple coins in one run', check: () => run.coinsGot >= 12 },
+  { text: 'Chain 4 perfect slides', check: () => run.maxCombo >= 4 },
+  { text: 'Brush 3 clouds in one run', check: () => run.cloudsTouched >= 3 },
+  { text: 'Fire the boost twice in one run', check: () => run.boostsUsed >= 2 },
+  { text: 'Fly 1,500 m in one run', check: () => (owl.x - run.startX) / 40 >= 1500 },
+  { text: 'Spot Champ out on the lake', check: () => run.champSeen },
+  { text: 'Grab 30 maple coins in one run', check: () => run.coinsGot >= 30 },
+  { text: 'Chain 7 perfect slides', check: () => run.maxCombo >= 7 },
+  { text: 'Visit a creemee stand', check: () => run.creemees >= 1 },
+  { text: 'Fly 4,000 m in one run', check: () => (owl.x - run.startX) / 40 >= 4000 },
+];
+let goalsDone = 0;
+try { goalsDone = Math.min(parseInt(localStorage.getItem('champlain_glider_goals') || '0', 10) || 0, GOALS.length); } catch (e) {}
+function multNow() { return 1 + goalsDone; }
+function goalText() {
+  return goalsDone >= GOALS.length
+    ? 'All goals done. Multiplier x' + multNow()
+    : 'Goal: ' + GOALS[goalsDone].text + '  (multiplier x' + multNow() + ')';
+}
+// The route across the state, one town every 1,200 m
+const TOWNS = [
+  'Burlington', 'Winooski', 'Essex', 'Richmond', 'Waterbury', 'Montpelier',
+  'Stowe', 'Morrisville', 'Hardwick', 'St Johnsbury', 'Lyndonville',
+  'Newport', 'Island Pond', 'Jay', 'Derby Line',
+];
+
+// Pace ghost of your best run (distance over time; rides today's hills)
+let ghost = null;
+try { ghost = JSON.parse(localStorage.getItem('champlain_glider_ghost') || 'null'); } catch (e) { ghost = null; }
+
+function thrushUnlocked() { return goalsDone >= 5; }
+
+const TRAVELER_LINES = [
+  'Hey from Winooski!', 'Creemee after this?', 'Church Street says hi',
+  'The lake is glass today', 'Race you to Stowe!', 'Leaf peepers everywhere',
+  'Watch out for the night', 'Montpelier or bust', 'Nice wings, friend',
+  'Bernie waved at me once',
+];
+
+const owl = {
+  x: 0, y: 0, vx: 0, vy: 0,
+  grounded: false, angle: 0, wingT: 0, blink: 0, airTime: 0, squash: 0, chomp: 0,
+};
+let travelers = [];
+let rivals = [];    // named birds flying the route alongside you
+const RIVAL_NAMES = [
+  'maple_mike', 'btv_sarah', 'greenmtn_dave', 'winooski_wren', 'stowe_flyer',
+  'craftsbury_kid', 'lakegirl_lu', 'monkton_max', 'vt_hermit', 'sk8er_ethan',
+  'queencity_q', 'shelburne_sam',
+];
+const RIVAL_LINES = ['catch me if you can', 'nice slide!', 'race ya to Stowe', 'whoa, the night!', 'gg', 'so fast!!'];
+const run = {
+  startX: 0, score: 0, combo: 0, fever: false, perfects: 0,
+  duskX: 0, duskV: 0, darkness: 0, time: 0, newBest: false, sleepZ: 0,
+  announcedX: -Infinity, zoneName: '',
+  boost: 0, boostHinted: false, coinsGot: 0,
+  champT: -1, champX: 0.7, champWait: 8, champSeen: false,
+  cloudsTouched: 0, maxCombo: 0, boostsUsed: 0, creemees: 0,
+  travelerIn: 12, goalHit: false, rivalIn: 18, racesWon: 0,
+  townIdx: 0, zoneType: 'rolling', path: [], nextSample: 0,
+  ghostFinal: null, beatGhost: false, fwT: 0, fwNext: 0,
+};
+let camX = 0, camY = 0, zoom = 1, altSmoothed = 0, groundSm = 0, spdSmoothed = 0, gyCam = 0;
+let particles = [];
+let popups = [];
+let snowAcc = 0, trailAcc = 0, fireflyAcc = 0, lastPopT = -10;
+
+function reset() {
+  terrain.reset();
+  terrain.ensure(4000);
+  run.startX = -1100;
+  owl.x = run.startX;
+  owl.y = terrain.heightAt(owl.x) - 2;
+  const s = terrain.slopeAt(owl.x);
+  const len = Math.hypot(1, s);
+  owl.vx = TUNE.phys.startSpeed / len;
+  owl.vy = TUNE.phys.startSpeed * s / len;
+  owl.grounded = true;
+  owl.angle = Math.atan2(s, 1);
+  owl.wingT = 0; owl.blink = 0; owl.airTime = 0;
+
+  run.score = 0; run.combo = 0; run.fever = false; run.perfects = 0;
+  run.duskX = owl.x - TUNE.dusk.startGap;
+  run.duskV = TUNE.dusk.baseSpeed;
+  run.darkness = 0; run.time = 0; run.newBest = false; run.sleepZ = 0;
+  run.announcedX = owl.x; run.zoneName = '';
+  run.boost = 0; run.coinsGot = 0;
+  run.champT = -1; run.champWait = 6 + Math.random() * TUNE.sky.champMeanWait;
+  run.champSeen = false; run.cloudsTouched = 0; run.maxCombo = 0;
+  run.boostsUsed = 0; run.creemees = 0; run.goalHit = false;
+  run.travelerIn = TUNE.sky.travelerWait[0] * (0.4 + Math.random() * 0.6);
+  run.rivalIn = 4 + Math.random() * 5;
+  run.racesWon = 0;
+  travelers = [];
+  rivals = [];
+  owl.squash = 0; owl.chomp = 0;
+  run.townIdx = 0; run.zoneType = 'rolling'; run.path = []; run.nextSample = 0;
+  run.ghostFinal = (ghost && ghost.d && ghost.d.length) ? ghost.d[ghost.d.length - 1] : null;
+  run.beatGhost = false; run.fwT = 0; run.fwNext = 0;
+  if (birdKind === 'thrush' && !thrushUnlocked()) birdKind = 'cardinal';
+  el.goalMenu.textContent = goalText();
+  refreshBirdChips();
+
+  camX = owl.x; camY = owl.y * 0.75; zoom = 1; altSmoothed = 0; groundSm = owl.y; lastPopT = -10;
+  spdSmoothed = TUNE.phys.startSpeed; gyCam = owl.y;
+  particles = []; popups = [];
+  snowAcc = 0; trailAcc = 0;
+}
+reset();
+
+/* =====================================================================
+   Input: pointer (touch + mouse) and Space
+   ===================================================================== */
+let lastPressAt = -1e9;
+function doBoost() {
+  run.boost = 0;
+  run.boostsUsed++;
+  const sp = Math.hypot(owl.vx, owl.vy) || 1;
+  let nx = owl.vx / sp, ny = owl.vy / sp;
+  if (owl.grounded) { ny -= TUNE.boost.upKick / sp; const l = Math.hypot(nx, ny); nx /= l; ny /= l; owl.y -= 6; owl.grounded = false; }
+  const sp2 = Math.min(sp + TUNE.boost.impulse, TUNE.phys.maxSpeed);
+  owl.vx = sp2 * nx; owl.vy = sp2 * ny;
+  addPopup('BOOST!', owl.x, owl.y - 110, '#ffd76a', 34);
+  for (let i = 0; i < 22; i++) {
+    addParticle({
+      x: owl.x - 10, y: owl.y, vx: -nx * (200 + Math.random() * 500) + (Math.random() - 0.5) * 200,
+      vy: -ny * (200 + Math.random() * 500) + (Math.random() - 0.5) * 200,
+      life: 0.5 + Math.random() * 0.4, age: 0, size: 2 + Math.random() * 3.5, color: '255,190,70', grav: 200,
+    });
+  }
+  sfxBoost();
+}
+function press() {
+  initAudio();
+  const now = performance.now();
+  const doubleTap = now - lastPressAt < TUNE.boost.tapWindow;
+  lastPressAt = now;
+  if (state === STATE.MENU) {
+    el.menu.classList.add('hidden');
+    if (!introSeen) {
+      introSeen = true;
+      introT = 0;
+      state = STATE.INTRO;
+    } else {
+      state = STATE.PLAY;
+      holding = true;
+    }
+  } else if (state === STATE.INTRO) {
+    // tapping skips the wake-up
+    state = STATE.PLAY;
+    holding = true;
+  } else if (state === STATE.PLAY) {
+    holding = true;
+    if (doubleTap && run.boost >= 1) doBoost();
+  } else if (state === STATE.OVER) {
+    if (performance.now() - overAt > 700) {
+      reset();
+      state = STATE.PLAY;
+      el.over.classList.add('hidden');
+      holding = true;
+    }
+  }
+}
+function release() { holding = false; }
+
+// Capture-phase listeners: UI elements can swallow bubbling events, but the
+// release must NEVER be missed, or the bird dives forever on its own.
+const activePointers = new Set();
+const uiTarget = (e) => e.target && e.target.closest && e.target.closest('#lb, .birdChip, .brief');
+window.addEventListener('pointerdown', (e) => {
+  if (uiTarget(e)) return;
+  e.preventDefault();
+  activePointers.add(e.pointerId);
+  press();
+}, true);
+window.addEventListener('pointerup', (e) => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size === 0) release();
+}, true);
+window.addEventListener('pointercancel', (e) => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size === 0) release();
+}, true);
+// Watchdog: if the mouse moves with no button down, any lost pointerup is moot
+window.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse' && e.buttons === 0 && activePointers.size > 0) {
+    activePointers.clear();
+    release();
+  }
+}, true);
+const touchOk = (e) => e.target && e.target.closest && e.target.closest('#lb, .birdChip, .brief');
+window.addEventListener('touchstart', (e) => { if (!touchOk(e)) e.preventDefault(); }, { passive: false });
+window.addEventListener('touchmove', (e) => { if (!touchOk(e)) e.preventDefault(); }, { passive: false });
+window.addEventListener('touchend', (e) => { if (!touchOk(e)) e.preventDefault(); }, { passive: false });
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+window.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) return;
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) press(); }
+});
+window.addEventListener('keyup', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) return;
+  if (e.code === 'Space') { e.preventDefault(); release(); }
+});
+window.addEventListener('blur', release);
+
+/* =====================================================================
+   Effects
+   ===================================================================== */
+function addPopup(text, wx, wy, color, size) {
+  popups.push({ text, x: wx, y: wy, age: 0, life: 1.1, color: color || '#ffffff', size: size || 26 });
+}
+function addParticle(p) {
+  if (particles.length >= TUNE.fx.maxParticles) particles.shift();
+  particles.push(p);
+}
+function landingPuff(x, y, n, strong) {
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI * (0.15 + 0.7 * Math.random());
+    const sp = (strong ? 260 : 140) * (0.4 + Math.random());
+    addParticle({
+      x: x + (Math.random() - 0.5) * 20, y,
+      vx: Math.cos(a) * sp + owl.vx * 0.25, vy: Math.sin(a) * sp,
+      life: 0.55 + Math.random() * 0.35, age: 0, size: 2.5 + Math.random() * 3.5,
+      color: '255,255,255', grav: 900,
+    });
+  }
+}
+
+/* =====================================================================
+   Landing / perfect slide logic
+   ===================================================================== */
+function handleLanding(slope, tx, ty, preVx, preVy) {
+  const speed = Math.hypot(preVx, preVy);
+  const align = speed > 1 ? (preVx * tx + preVy * ty) / speed : 1;
+  const P = TUNE.perfect;
+
+  if (holding && slope > P.minSlope && align > P.align && speed > P.minSpeed) {
+    // Perfect slide
+    run.combo++;
+    run.perfects++;
+    run.maxCombo = Math.max(run.maxCombo, run.combo);
+    if (!run.fever && run.combo >= P.feverAt) {
+      run.fever = true;
+      addPopup('FEVER!', owl.x, owl.y - 130, '#ffd76a', 40);
+      sfxFever();
+    } else {
+      sfxPerfect();
+    }
+    run.boost = Math.min(1, run.boost + TUNE.boost.perfectFill);
+    const mult = (run.fever ? TUNE.score.feverMult : 1) * multNow();
+    run.score += P.bonus * run.combo * mult;
+    const push = run.fever ? TUNE.dusk.feverPushback : TUNE.dusk.pushback;
+    run.duskX -= push;
+    const sp2 = Math.min(Math.hypot(owl.vx, owl.vy) * P.speedBoost + P.flatBoost, TUNE.phys.maxSpeed);
+    owl.vx = sp2 * tx; owl.vy = sp2 * ty;
+    addPopup(run.fever ? 'Perfect! x' + run.combo : 'Perfect!' + (run.combo > 1 ? ' x' + run.combo : ''),
+      owl.x, owl.y - 90, run.fever ? '#ffd76a' : '#ffffff', run.fever ? 32 : 28);
+    landingPuff(owl.x, owl.y + 10, 10, true);
+    if (run.fever) {
+      for (let i = 0; i < 14; i++) {
+        addParticle({
+          x: owl.x, y: owl.y, vx: (Math.random() - 0.5) * 500, vy: -Math.random() * 420,
+          life: 0.7 + Math.random() * 0.4, age: 0, size: 2 + Math.random() * 3,
+          color: '255,205,90', grav: 700,
+        });
+      }
+    }
+  } else {
+    // Missed the window: combo and Fever end
+    if (run.fever) addPopup('Fever over', owl.x, owl.y - 100, '#cfd6ff', 24);
+    run.combo = 0;
+    run.fever = false;
+    if (align < P.slamAlign) {
+      owl.vx *= P.slamPenalty; owl.vy *= P.slamPenalty;
+      landingPuff(owl.x, owl.y + 10, 14, true);
+    } else {
+      landingPuff(owl.x, owl.y + 10, 5, false);
+    }
+  }
+}
+
+/* =====================================================================
+   Update
+   ===================================================================== */
+function diveG(vx) {
+  const k = clamp(Math.pow(vx / TUNE.phys.diveScaleRef, 2), 1, TUNE.phys.diveScaleMax);
+  return TUNE.phys.diveGravity * k;
+}
+
+// Where would a full dive from this state land, and how steep is it there?
+function predictLandingSlope(x, y, vx, vy) {
+  const dt = 1 / 90;
+  const g = diveG(vx);
+  for (let i = 0; i < 500; i++) {
+    vy += g * dt; x += vx * dt; y += vy * dt;
+    if (y >= terrain.heightAt(x)) return terrain.slopeAt(x);
+  }
+  return 0;
+}
+
+// The same point mass the player runs, minus scoring: rivals obey physics too
+function rivalPhysStep(rv, dt) {
+  const g = rv.holding ? diveG(rv.vx) : TUNE.phys.gravity;
+  rv.vy += g * dt;
+  if (rv.holding) {
+    rv.vx += g * TUNE.phys.diveForward * dt;
+    if (rv.vy > TUNE.phys.maxDiveVy) rv.vy = TUNE.phys.maxDiveVy;
+  }
+  if (!rv.grounded && rv.vx < TUNE.phys.minAirVx) rv.vx = TUNE.phys.minAirVx;
+  const sp = Math.hypot(rv.vx, rv.vy);
+  if (sp > TUNE.phys.maxSpeed) { const k = TUNE.phys.maxSpeed / sp; rv.vx *= k; rv.vy *= k; }
+  const preVx = rv.vx, preVy = rv.vy;
+  rv.x += rv.vx * dt;
+  rv.y += rv.vy * dt;
+  const gy = terrain.heightAt(rv.x);
+  if (rv.y >= gy) {
+    const s = terrain.slopeAt(rv.x);
+    const len = Math.hypot(1, s);
+    const tx = 1 / len, ty = s / len;
+    const wasAir = !rv.grounded;
+    let dot = rv.vx * tx + rv.vy * ty;
+    if (wasAir && dot > 0) dot = lerp(dot, Math.hypot(preVx, preVy), TUNE.phys.landingKeep);
+    rv.vx = dot * tx; rv.vy = dot * ty;
+    rv.y = gy;
+    rv.grounded = true;
+    const f = 1 - TUNE.phys.groundFriction * dt;
+    rv.vx *= f; rv.vy *= f;
+    let gsp = Math.hypot(rv.vx, rv.vy) * Math.sign(rv.vx || 1);
+    if (gsp < TUNE.phys.minGroundSpeed) {
+      rv.vx = TUNE.phys.minGroundSpeed * tx;
+      rv.vy = TUNE.phys.minGroundSpeed * ty;
+    }
+  } else {
+    if (rv.grounded && !rv.holding && rv.vy < -TUNE.phys.crestPopMinVy && run.time - rv.lastPop > TUNE.phys.crestPopCooldown) {
+      rv.vy *= TUNE.phys.crestPop;
+      rv.lastPop = run.time;
+    }
+    rv.grounded = false;
+  }
+}
+
+function physStep(dt) {
+  const g = holding ? diveG(owl.vx) : TUNE.phys.gravity;
+  owl.vy += g * dt;
+  if (holding) {
+    // Diving also drives you forward, so pressing always feels productive
+    owl.vx += g * TUNE.phys.diveForward * dt;
+    if (owl.vy > TUNE.phys.maxDiveVy) owl.vy = TUNE.phys.maxDiveVy;
+  }
+  if (!holding && !owl.grounded && owl.vy > TUNE.phys.glideSink) {
+    // wings out: excess dive speed washes off the moment you release
+    owl.vy -= (owl.vy - TUNE.phys.glideSink) * Math.min(1, TUNE.phys.glideFlare * dt);
+  }
+  if (!owl.grounded && owl.vx < TUNE.phys.minAirVx) owl.vx = TUNE.phys.minAirVx;
+
+  // Speed cap
+  const sp = Math.hypot(owl.vx, owl.vy);
+  if (sp > TUNE.phys.maxSpeed) {
+    const k = TUNE.phys.maxSpeed / sp;
+    owl.vx *= k; owl.vy *= k;
+  }
+
+  const preVx = owl.vx, preVy = owl.vy;
+  owl.x += owl.vx * dt;
+  owl.y += owl.vy * dt;
+
+  const gy = terrain.heightAt(owl.x);
+  if (owl.y >= gy) {
+    const s = terrain.slopeAt(owl.x);
+    const len = Math.hypot(1, s);
+    const tx = 1 / len, ty = s / len;
+    const wasAir = !owl.grounded;
+
+    // Project velocity onto the slope; snap to the surface.
+    // Carve assist: landings carry through part of their pre-landing speed,
+    // so touching down redirects momentum instead of eating it (flow saver).
+    let dot = owl.vx * tx + owl.vy * ty;
+    if (wasAir && dot > 0) {
+      dot = lerp(dot, Math.hypot(preVx, preVy), TUNE.phys.landingKeep);
+    }
+    owl.vx = dot * tx; owl.vy = dot * ty;
+    owl.y = gy;
+    owl.grounded = true;
+
+    // Brief skims neither score nor break the combo
+    if (wasAir && owl.airTime >= TUNE.perfect.graceAir) {
+      handleLanding(s, tx, ty, preVx, preVy);
+      owl.squash = 1;
+    }
+    owl.airTime = 0;
+
+    // Ground friction and stall guard (frozen lake is nearly frictionless)
+    const f = 1 - TUNE.phys.groundFriction * (run.zoneType === 'lake' ? 0.1 : 1) * dt;
+    owl.vx *= f; owl.vy *= f;
+    let gsp = Math.hypot(owl.vx, owl.vy) * Math.sign(owl.vx || 1);
+    if (gsp < TUNE.phys.minGroundSpeed) {
+      owl.vx = TUNE.phys.minGroundSpeed * tx;
+      owl.vy = TUNE.phys.minGroundSpeed * ty;
+    }
+  } else {
+    // Crests launch naturally, and a good upward exit gets an extra send
+    if (owl.grounded && !holding && owl.vy < -TUNE.phys.crestPopMinVy && run.time - lastPopT > TUNE.phys.crestPopCooldown) {
+      owl.vy *= TUNE.phys.crestPop;
+      lastPopT = run.time;
+      if (Math.hypot(owl.vx, owl.vy) > 1100) sfxWhee();
+    }
+    owl.grounded = false;
+    owl.airTime += dt;
+  }
+}
+
+function update(dt) {
+  run.time += dt;
+
+  if (state === STATE.PLAY) {
+    const sub = TUNE.phys.substeps;
+    for (let i = 0; i < sub; i++) physStep(dt / sub);
+
+    // Distance score (Fever and goal multiplier both apply)
+    const mult = (run.fever ? TUNE.score.feverMult : 1) * multNow();
+    run.score += Math.max(0, owl.vx) * dt * TUNE.score.perPixel * mult;
+
+    // Dusk chase: it slows as it closes in, so you dangle at the edge of the
+    // dark instead of being snapped up, and the night bar earns its keep
+    // Adaptive pursuit: the night paces itself to your own speed
+    const match = lerp(TUNE.dusk.matchStart, TUNE.dusk.matchEnd, clamp(run.time / TUNE.dusk.matchRamp, 0, 1));
+    const duskTarget = clamp(spdSmoothed * match, TUNE.dusk.baseSpeed, TUNE.dusk.maxSpeed);
+    run.duskV += (duskTarget - run.duskV) * (1 - Math.exp(-TUNE.dusk.matchEase * dt));
+    const gapPre = owl.x - run.duskX;
+    const damp = lerp(TUNE.dusk.damping, 1, clamp(gapPre / TUNE.dusk.dampGap, 0, 1));
+    // The night hunts along the ground: while you soar high it barely gains,
+    // so a big launch never feels like it summons the dark
+    const altDusk = Math.max(0, terrain.heightAt(owl.x) - owl.y);
+    const airSafety = lerp(1, 0.25, clamp(altDusk / 1200, 0, 1));
+    run.duskX += run.duskV * damp * airSafety * dt;
+    if (owl.x - run.duskX > TUNE.dusk.maxGap) run.duskX = owl.x - TUNE.dusk.maxGap;
+    const gap = owl.x - run.duskX;
+    const darkTarget = clamp(1 - gap / TUNE.dusk.warnGap, 0, 0.82);
+    run.darkness += (darkTarget - run.darkness) * Math.min(1, 1.6 * dt);
+
+    if (gap <= 0) gameOver();
+
+    // Announce Vermont zones as you cross into them
+    for (const m of terrain.zoneMarks) {
+      if (m.name && m.x > run.announcedX && m.x <= owl.x) {
+        run.announcedX = m.x;
+        run.zoneName = m.name;
+        run.zoneType = m.type;
+        addPopup(m.name, owl.x + 300, owl.y - 220, '#ffe9c4', 30);
+      }
+    }
+
+    // Town milestones with roadside signs
+    const distM = (owl.x - run.startX) / 40;
+    const townNow = Math.floor(distM / 1200);
+    if (townNow > run.townIdx) {
+      run.townIdx = townNow;
+      const town = TOWNS[(townNow - 1) % TOWNS.length];
+      addPopup('Entering ' + town, owl.x + 350, owl.y - 260, '#d8ffd8', 26);
+      terrain.decos.push({ x: owl.x + 1100, type: 'sign', size: 1.1, seed: Math.random(), text: town });
+    }
+
+    // Pace ghost: record this run, ride against your best
+    if (run.time >= run.nextSample) {
+      run.nextSample += 0.25;
+      run.path.push(Math.round(owl.x - run.startX));
+    }
+
+    // Zone weather
+    if (run.zoneType === 'stowe') {
+      snowAcc -= TUNE.fx.snowRate * dt * 0.7;   // fewer snowflakes, more leaves
+      if (Math.random() < 8 * dt) {
+        addParticle({
+          x: camX + (Math.random() * 1.2 - 0.1) * 2000, y: owl.y - 500 - Math.random() * 600,
+          vx: -60 - Math.random() * 100, vy: 50 + Math.random() * 60,
+          life: 4, age: 0, size: 2.2 + Math.random() * 1.8,
+          color: Math.random() < 0.5 ? '224,140,60' : '200,90,55', grav: 0, leaf: true,
+        });
+      }
+    } else if (run.zoneType === 'greens' || run.zoneType === 'longrun' || run.zoneType === 'kingdom') {
+      snowAcc += TUNE.fx.snowRate * dt * 1.4;   // mountain snow falls harder
+    } else if (run.zoneType === 'gorge' && Math.random() < 3 * dt) {
+      addParticle({
+        x: owl.x + 400 + Math.random() * 1600, y: terrain.heightAt(owl.x + 800) - 60 - Math.random() * 200,
+        vx: -40, vy: -8, life: 3.5, age: 0, size: 14 + Math.random() * 12, color: '222,226,238', grav: 0, mist: true,
+      });
+    }
+
+    // Maple coins
+    const feverMult = (run.fever ? TUNE.score.feverMult : 1) * multNow();
+    for (const c of terrain.coins) {
+      if (c.taken || Math.abs(c.x - owl.x) > TUNE.coins.radius) continue;
+      if (Math.abs(c.y - owl.y) > TUNE.coins.radius) continue;
+      c.taken = true;
+      run.coinsGot++;
+      owl.chomp = 1;
+      run.score += TUNE.coins.value * feverMult;
+      const hadFull = run.boost >= 1;
+      run.boost = Math.min(1, run.boost + TUNE.boost.coinFill);
+      sfxCoin();
+      addPopup('+' + TUNE.coins.value * feverMult, c.x, c.y - 30, '#ffd76a', 18);
+      for (let i = 0; i < 5; i++) {
+        addParticle({ x: c.x, y: c.y, vx: (Math.random() - 0.5) * 300, vy: (Math.random() - 0.5) * 300, life: 0.4, age: 0, size: 2, color: '255,205,90', grav: 300 });
+      }
+      if (!hadFull && run.boost >= 1 && !run.boostHinted) {
+        run.boostHinted = true;
+        addPopup('Boost ready! Double tap!', owl.x, owl.y - 260, '#ffd76a', 26);
+      }
+    }
+
+    // Brushing a cloud is worth a little something
+    if (!owl.grounded) {
+      for (const cl of terrain.clouds) {
+        if (cl.touched || Math.abs(cl.x - owl.x) > cl.w || Math.abs(cl.y - owl.y) > 70) continue;
+        cl.touched = true;
+        run.cloudsTouched++;
+        run.score += 50 * feverMult;
+        run.boost = Math.min(1, run.boost + TUNE.boost.cloudFill);
+        addPopup('Cloud! +' + 50 * feverMult, owl.x, owl.y - 90, '#ffffff', 20);
+      }
+    }
+
+    // Hoops: thread them for points and boost
+    for (const rg of terrain.rings) {
+      if (rg.hit || Math.abs(rg.x - owl.x) > 55 || Math.abs(rg.y - owl.y) > rg.r * 0.85) continue;
+      rg.hit = true;
+      owl.chomp = 0.6;
+      const hb = 150 * feverMult;
+      run.score += hb;
+      run.boost = Math.min(1, run.boost + 0.12);
+      addPopup('Hoop! +' + hb, rg.x, rg.y - rg.r - 30, '#ffd76a', 24);
+      sfxPerfect();
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * 6.2832;
+        addParticle({ x: rg.x, y: rg.y + Math.sin(a) * rg.r * 0.7, vx: owl.vx * 0.2, vy: Math.sin(a) * 200, life: 0.5, age: 0, size: 2.5, color: '255,205,90', grav: 0 });
+      }
+    }
+
+    // Hot air balloons are bouncy: hit one for a big lift
+    for (const b of terrain.balloons) {
+      if (b.kind !== 'balloon') continue;
+      if (run.time - (b.bounceAt || -9) < 1.2) continue;
+      if (Math.abs(b.x - owl.x) > 85 || Math.abs(b.y - owl.y) > 110) continue;
+      b.bounceAt = run.time;
+      owl.vy = -Math.max(820, Math.abs(owl.vy) * 0.45 + 620);
+      owl.grounded = false;
+      owl.squash = 1;
+      addPopup('Boing!', b.x, b.y - 140, '#ffffff', 28);
+      sfxWhee();
+      landingPuff(b.x, b.y + 60, 8, true);
+    }
+
+    // Creemee stands
+    for (const st of terrain.stands) {
+      if (st.taken || Math.abs(st.x - owl.x) > 130 || Math.abs(st.y - owl.y) > 170) continue;
+      st.taken = true;
+      run.creemees++;
+      owl.chomp = 1;
+      run.score += 500 * feverMult;
+      run.boost = Math.min(1, run.boost + 0.25);
+      addPopup('Maple creemee! +' + 500 * feverMult, st.x, st.y - 120, '#ffd76a', 26);
+      sfxFever();
+    }
+
+    // Champ keeps his own schedule out on the lake
+    run.champWait -= dt;
+    if (run.champT >= 0) {
+      run.champT += dt;
+      run.champSeen = true;
+      if (run.champT > 4.4) { run.champT = -1; run.champWait = 6 + Math.random() * TUNE.sky.champMeanWait; }
+    } else if (run.champWait <= 0) {
+      run.champT = 0;
+      run.champX = 0.45 + Math.random() * 0.45;
+    }
+
+    // Rivals: named birds fly the route with you for minutes at a time.
+    // They hop hills, drift ahead and behind, chat, and eventually fall
+    // to the night behind you, just like other players would.
+    run.rivalIn -= dt;
+    if (run.rivalIn <= 0 && rivals.length < 2) {
+      run.rivalIn = TUNE.rival.wait[0] + Math.random() * (TUNE.rival.wait[1] - TUNE.rival.wait[0]);
+      const kinds = ['cardinal', 'jay', 'owl'];
+      const fromBehind = Math.random() < 0.5;
+      const spawnX = owl.x + (fromBehind ? -650 : 850);
+      const spawnSlope = terrain.slopeAt(spawnX);
+      const spawnLen = Math.hypot(1, spawnSlope);
+      const spawnSpd = Math.max(spdSmoothed, 900);
+      const rv = {
+        name: RIVAL_NAMES[Math.floor(Math.random() * RIVAL_NAMES.length)],
+        kind: kinds[Math.floor(Math.random() * kinds.length)],
+        x: spawnX, y: terrain.heightAt(spawnX) - 2,
+        vx: spawnSpd / spawnLen, vy: spawnSpd * spawnSlope / spawnLen,
+        grounded: true, holding: false, lastPop: -10, think: 0,
+        skill: 0.72 + Math.random() * 0.24,
+        stamina: TUNE.rival.stamina[0] + Math.random() * (TUNE.rival.stamina[1] - TUNE.rival.stamina[0]),
+        seed: Math.random() * 100, flap: Math.random() * 6.28,
+        wasAhead: !fromBehind, passAt: -100, chatAt: 6 + Math.random() * 14,
+      };
+      rivals.push(rv);
+      addPopup(rv.name + ' joined the run', owl.x + 250, owl.y - 300, '#cfe4ff', 22);
+    }
+    for (let ri = rivals.length - 1; ri >= 0; ri--) {
+      const rv = rivals[ri];
+      rv.stamina -= dt;
+      // Their brain: same hold/release decisions a player makes, made a few
+      // times a second, with mistakes based on skill. Tired rivals stop diving.
+      rv.think -= dt;
+      if (rv.think <= 0) {
+        rv.think = 0.14 + Math.random() * 0.1;
+        let want;
+        if (rv.grounded) want = terrain.slopeAt(rv.x) > 0.06;
+        else want = predictLandingSlope(rv.x, rv.y, rv.vx, rv.vy) > 0.18 && rv.vy > -260;
+        // Rubber band through effort, not teleporting: behind = focused, ahead = lazy
+        const gapR = (rv.x - owl.x) / TUNE.rival.band;
+        const focus = clamp(rv.skill - gapR * 0.18, 0.35, 0.98);
+        rv.holding = Math.random() < focus ? want : Math.random() < 0.4;
+        if (rv.stamina <= 0) rv.holding = false;
+      }
+      // Same physics as the player, two substeps
+      rivalPhysStep(rv, dt / 2);
+      rivalPhysStep(rv, dt / 2);
+      // Pass detection: overtaking a rival scores, losing the lead stings
+      const ahead = owl.x > rv.x;
+      if (ahead !== rv.wasAhead) {
+        rv.wasAhead = ahead;
+        if (ahead && run.time - rv.passAt > TUNE.rival.passCooldown) {
+          rv.passAt = run.time;
+          run.racesWon++;
+          const pb = TUNE.rival.passBonus * feverMult;
+          run.score += pb;
+          addPopup('Passed ' + rv.name + '! +' + pb.toLocaleString(), owl.x, owl.y - 240, '#ffd76a', 26);
+          sfxPerfect();
+        } else if (!ahead) {
+          addPopup(rv.name + ' takes the lead', rv.x, rv.y - 130, '#cfd6ff', 20);
+        }
+      }
+      // The occasional chat bubble
+      rv.chatAt -= dt;
+      if (rv.chatAt <= 0 && Math.abs(rv.x - owl.x) < 900) {
+        rv.chatAt = 12 + Math.random() * 18;
+        addPopup(RIVAL_LINES[Math.floor(Math.random() * RIVAL_LINES.length)], rv.x, rv.y - 110, '#ffffff', 19);
+      }
+      // Rivals leave the way players do: swallowed by the night, or fading out
+      if (rv.x < run.duskX + 60) {
+        addPopup('The night caught ' + rv.name, rv.x + 400, rv.y - 150, '#8f96c9', 22);
+        rivals.splice(ri, 1);
+      } else if (rv.stamina <= 0 && rv.x < owl.x - 2400) {
+        addPopup(rv.name + ' dropped out', owl.x - 400, owl.y - 200, '#8f96c9', 20);
+        rivals.splice(ri, 1);
+      } else if (rv.x > owl.x + 4500) {
+        rivals.splice(ri, 1);
+      }
+    }
+
+    // A fellow bird passes through now and then
+    run.travelerIn -= dt;
+    if (run.travelerIn <= 0 && travelers.length < 2) {
+      run.travelerIn = TUNE.sky.travelerWait[0] + Math.random() * (TUNE.sky.travelerWait[1] - TUNE.sky.travelerWait[0]);
+      const kinds = ['cardinal', 'jay', 'owl'].filter(k => k !== birdKind);
+      travelers.push({
+        x: owl.x + 1700, y: terrain.heightAt(owl.x + 1700) - 350 - Math.random() * 400,
+        vx: clamp(owl.vx * (0.55 + Math.random() * 0.3), 300, 1400),
+        kind: kinds[Math.floor(Math.random() * kinds.length)],
+        flap: Math.random() * 6.28, said: false,
+      });
+    }
+    for (let t = travelers.length - 1; t >= 0; t--) {
+      const tv = travelers[t];
+      tv.x += tv.vx * dt;
+      tv.y += Math.sin(run.time * 1.4 + tv.flap) * 26 * dt;
+      if (!tv.said && Math.abs(tv.x - owl.x) < 380) {
+        tv.said = true;
+        addPopup(TRAVELER_LINES[Math.floor(Math.random() * TRAVELER_LINES.length)], tv.x, tv.y - 90, '#ffffff', 20);
+      }
+      if (tv.x < owl.x - 2600 || tv.x > owl.x + 4200) travelers.splice(t, 1);
+    }
+
+    // Fireflies come out when the night is close
+    if (run.darkness > TUNE.sky.fireflyDark) {
+      fireflyAcc += TUNE.sky.fireflyRate * dt;
+      while (fireflyAcc >= 1) {
+        fireflyAcc -= 1;
+        addParticle({
+          x: owl.x + (Math.random() - 0.3) * 1400, y: terrain.heightAt(owl.x) - 40 - Math.random() * 500,
+          vx: (Math.random() - 0.5) * 60, vy: (Math.random() - 0.5) * 60,
+          life: 1.6 + Math.random(), age: 0, size: 1.6 + Math.random() * 1.6, color: '190,255,120', grav: 0,
+        });
+      }
+    }
+
+    // Goal check: complete one and your multiplier rises for good
+    if (!run.goalHit && goalsDone < GOALS.length && GOALS[goalsDone].check()) {
+      run.goalHit = true;
+      goalsDone++;
+      try { localStorage.setItem('champlain_glider_goals', String(goalsDone)); } catch (e) {}
+      addPopup('Goal complete! Multiplier x' + multNow(), owl.x, owl.y - 300, '#ffd76a', 32);
+      if (goalsDone === 5) {
+        addPopup('Hermit Thrush unlocked!', owl.x, owl.y - 380, '#e8c9a0', 30);
+        refreshBirdChips();
+      }
+      sfxFever();
+    }
+  } else if (state === STATE.OVER) {
+    // The owl settles and falls asleep while the night swallows the sky
+    const gy = terrain.heightAt(owl.x);
+    if (owl.y < gy) { owl.vy += TUNE.phys.gravity * dt; owl.y = Math.min(gy, owl.y + owl.vy * dt); }
+    else { owl.y = gy; owl.vy = 0; }
+    owl.x += owl.vx * dt;
+    owl.vx *= Math.pow(0.12, dt);
+    run.darkness = clamp(run.darkness + dt / TUNE.dusk.fadeOut, 0, 0.94);
+    run.sleepZ += dt;
+    if (run.sleepZ > 0.9) {
+      run.sleepZ = 0;
+      addPopup('z', owl.x + 20, owl.y - 60, '#cfd6ff', 20 + Math.random() * 10);
+    }
+    // Beat your ghost: fireworks over the dark lake while the owl sleeps
+    if (run.beatGhost) {
+      run.fwT += dt;
+      if (run.fwT < 7 && run.fwT >= run.fwNext) {
+        run.fwNext = run.fwT + 0.55 + Math.random() * 0.4;
+        const fx = owl.x + 300 + Math.random() * 1400;
+        const fy = terrain.heightAt(fx) - 500 - Math.random() * 700;
+        const cols = ['255,120,90', '255,205,90', '130,200,255', '190,140,255', '150,230,150'];
+        const col = cols[Math.floor(Math.random() * cols.length)];
+        for (let fp = 0; fp < 34; fp++) {
+          const ang = (fp / 34) * 6.2832;
+          const sp = 260 + Math.random() * 320;
+          addParticle({
+            x: fx, y: fy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+            life: 1.1 + Math.random() * 0.5, age: 0, size: 2 + Math.random() * 2.5, color: col, grav: 260,
+          });
+        }
+        tone(180 + Math.random() * 120, 60, 0.5, 'sine', 0.05);
+      }
+    }
+  } else if (state === STATE.INTRO) {
+    // Dawn breaks over the nest; the bird blinks awake and the run begins
+    introT += dt;
+    run.darkness = Math.max(0, 0.55 * (1 - introT / 2.0));
+    owl.blink = introT < 1.3 ? 0.2 : 0;
+    if (introT > 0.4 && introT < 1.2 && Math.random() < dt * 1.4) {
+      addPopup('z', owl.x + 26, owl.y - 60, '#cfd6ff', 16 + Math.random() * 8);
+    }
+    if (introT > 1.9 && introT < 2.0) owl.squash = 0.7;
+    if (introT >= 2.4) { state = STATE.PLAY; }
+  } else {
+    // Menu: gentle idle drift of the scene
+    run.darkness = 0.06 + 0.03 * Math.sin(run.time * 0.6);
+  }
+
+  // Owl pose
+  let targetAngle;
+  if (owl.grounded || state !== STATE.PLAY) {
+    targetAngle = Math.atan2(terrain.slopeAt(owl.x), 1);
+  } else {
+    targetAngle = clamp(Math.atan2(owl.vy, Math.max(owl.vx, 60)), -1.15, 1.25);
+  }
+  // Slower rotation smoothing in the air (jittery spin reads badly); slope sets the ground pose
+  owl.angle += (targetAngle - owl.angle) * Math.min(1, (owl.grounded ? 14 : 8) * dt);
+  owl.wingT += (((holding && state === STATE.PLAY) ? 1 : 0) - owl.wingT) * Math.min(1, 12 * dt);
+  owl.blink -= dt;
+  if (owl.blink < -3 - Math.random() * 3) owl.blink = 0.12;
+  owl.squash = Math.max(0, owl.squash - dt * 5);
+  owl.chomp = Math.max(0, owl.chomp - dt * 2.6);
+
+  // Camera. Design rule: zoom only ever reacts to slow smoothed inputs (scale
+  // change is what reads as shake), and ALL fast correction happens through one
+  // position channel with one smoothing rate, solved as three constraints:
+  //   1. put the owl at its preferred screen height,
+  //   2. keep the ground on screen,
+  //   3. never push the owl above the top margin.
+  camX = owl.x;
+  const spd = Math.hypot(owl.vx, owl.vy);
+  const gyNow = terrain.heightAt(owl.x);
+  const alt = Math.max(0, gyNow - owl.y);
+  altSmoothed += (alt - altSmoothed) * (1 - Math.exp(-TUNE.view.altSmooth * dt));
+  spdSmoothed += (spd - spdSmoothed) * (1 - Math.exp(-TUNE.view.spdSmooth * dt));
+  // Slow ground reference: the backdrop breathes with the landscape, never with single hills
+  groundSm += (gyNow - groundSm) * (1 - Math.exp(-0.8 * dt));
+  // Medium ground reference for the framing constraint (calm but current)
+  gyCam += (gyNow - gyCam) * (1 - Math.exp(-4 * dt));
+
+  const owlFrac = lerp(TUNE.view.birdLow, TUNE.view.birdHigh, clamp(altSmoothed / TUNE.view.birdHighAlt, 0, 1));
+  const speedZoom = lerp(1, TUNE.view.zoomMin, clamp(spdSmoothed / TUNE.view.zoomOutAtSpeed, 0, 1));
+  // Rising altitude counts immediately (launch zoom-outs feel great); the
+  // return trip runs on the smoothed value so there is never any pumping.
+  const altForZoom = Math.max(alt, altSmoothed);
+  const groundZoom = TUNE.view.virtualHeight * (0.92 - owlFrac) / Math.max(altForZoom + 250, 1);
+  const targetZoom = state === STATE.PLAY ? clamp(Math.min(speedZoom, groundZoom), 0.30, 1) : 1;
+  const zErr = Math.abs(targetZoom - zoom);
+  // Emergency zoom-out only while the ground is actually slipping off screen
+  const scalePre = (H / TUNE.view.virtualHeight) * zoom;
+  const groundSyPre = (gyNow - camY) * scalePre + H * TUNE.view.anchorY;
+  const gViol = targetZoom < zoom ? clamp((groundSyPre - H) / (H * 0.3), 0, 1) : 0;
+  const zRate = TUNE.view.zoomLerp * (1 + 2.5 * clamp(zErr / 0.15, 0, 1)) + 7 * gViol;
+  zoom += (targetZoom - zoom) * (1 - Math.exp(-zRate * dt));
+  const scale = (H / TUNE.view.virtualHeight) * zoom;
+
+  const aH = H * TUNE.view.anchorY;
+  let camTarget = owl.y - (H * owlFrac - aH) / scale;
+  // Constraint 2: raise the view if the ground would slip off the bottom
+  const groundNeed = gyCam - (H * TUNE.view.groundMargin - aH) / scale;
+  if (groundNeed > camTarget) camTarget = groundNeed;
+  // Constraint 3: but never past the point where the owl leaves the top
+  const owlCap = owl.y - (H * TUNE.view.owlTopMargin - aH) / scale;
+  if (camTarget > owlCap) camTarget = owlCap;
+  // Adaptive rate: calm normally, ramping up smoothly only while the owl is
+  // actually outside its comfort band, so fast tracking never reads as jitter
+  const owlSyNow = (owl.y - camY) * scale + aH;
+  const outBy = Math.max((H * 0.10 - owlSyNow) / H, (owlSyNow - H * 0.40) / H, 0);
+  const camRate = TUNE.view.camSmooth + 70 * clamp(outBy / 0.06, 0, 1);
+  camY += (camTarget - camY) * (1 - Math.exp(-camRate * dt));
+  // Absolute last resort (rarely engages thanks to the adaptive rate)
+  const owlSy2 = (owl.y - camY) * scale + aH;
+  if (owlSy2 < H * 0.08) camY = owl.y - (H * 0.08 - aH) / scale;
+  else if (owlSy2 > H * 0.44) camY = owl.y - (H * 0.44 - aH) / scale;
+  terrain.ensure(camX + (W * (1 - TUNE.view.anchorX)) / scale + TUNE.hill.aheadPad);
+  terrain.prune(Math.min(run.duskX, camX - (W * TUNE.view.anchorX) / scale) - TUNE.hill.behindPad);
+
+  // Ambient snow
+  snowAcc += TUNE.fx.snowRate * dt;
+  while (snowAcc >= 1) {
+    snowAcc -= 1;
+    addParticle({
+      x: camX + (Math.random() * 1.3 - 0.15) * (W / scale), y: camY - (H * 0.7) / scale,
+      vx: -30 - Math.random() * 50, vy: 60 + Math.random() * 70,
+      life: 6, age: 0, size: 1 + Math.random() * 2.2, color: '255,255,255', grav: 0, snow: true,
+    });
+  }
+  // Fever trail
+  if (run.fever && state === STATE.PLAY) {
+    trailAcc += TUNE.fx.feverTrailRate * dt;
+    while (trailAcc >= 1) {
+      trailAcc -= 1;
+      addParticle({
+        x: owl.x - 18 + (Math.random() - 0.5) * 16, y: owl.y + (Math.random() - 0.5) * 20,
+        vx: owl.vx * 0.1 - 60, vy: -20 + (Math.random() - 0.5) * 80,
+        life: 0.5 + Math.random() * 0.3, age: 0, size: 1.5 + Math.random() * 2.5,
+        color: '255,205,90', grav: -60,
+      });
+    }
+  }
+
+  // Scenery flocks drift on their own
+  for (const f of terrain.flocks) f.x += f.vx * dt;
+
+  // Particles / popups
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.age += dt;
+    if (p.age >= p.life) { particles.splice(i, 1); continue; }
+    p.vy += (p.grav || 0) * dt;
+    if (p.leaf) p.vx += Math.sin(p.age * 4 + p.y * 0.01) * 60 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if ((p.snow || p.leaf) && p.y > terrain.heightAt(p.x)) { particles.splice(i, 1); }
+  }
+  for (let i = popups.length - 1; i >= 0; i--) {
+    const p = popups[i];
+    p.age += dt;
+    if (p.age >= p.life) popups.splice(i, 1);
+  }
+
+  updateAudio(dt);
+  updateHud();
+}
+
+function gameOver() {
+  state = STATE.OVER;
+  overAt = performance.now();
+  holding = false;
+  sfxNight();
+  // Did you outfly your ghost? (check before the ghost gets overwritten)
+  run.beatGhost = run.ghostFinal != null && (owl.x - run.startX) > run.ghostFinal;
+  if (run.beatGhost) addPopup('You beat your best pace!', owl.x + 300, owl.y - 320, '#ffd76a', 30);
+  run.newBest = Math.floor(run.score) > best;
+  if (run.newBest) {
+    best = Math.floor(run.score);
+    try {
+      localStorage.setItem('champlain_glider_best', String(best));
+      ghost = { dt: 0.25, d: run.path.slice(0, 4000) };
+      localStorage.setItem('champlain_glider_ghost', JSON.stringify(ghost));
+    } catch (e) {}
+  }
+  const dist = Math.max(0, Math.round((owl.x - run.startX) / 40));
+  el.overScore.innerHTML = Math.floor(run.score).toLocaleString() + ' <small>points</small>';
+  // Postcard
+  const town = run.townIdx > 0 ? TOWNS[(run.townIdx - 1) % TOWNS.length] : 'Burlington';
+  el.pcHead.textContent = 'Greetings from ' + town + '!';
+  el.pcDist.textContent = dist.toLocaleString() + ' m';
+  el.pcTowns.textContent = String(run.townIdx);
+  el.pcRivals.textContent = String(run.racesWon);
+  el.pcCombo.textContent = String(run.maxCombo);
+  el.pcCoins.textContent = String(run.coinsGot);
+  el.overBest.textContent = run.newBest ? 'New best!' : '';
+  el.goalOver.textContent = goalText();
+  el.over.classList.remove('hidden');
+  lbAfterRun(run.score);
+}
+
+function updateHud() {
+  const s = Math.floor(run.score);
+  if (s !== lastHudScore || multNow() !== lastMult) {
+    el.score.textContent = s.toLocaleString() + (multNow() > 1 ? ' ×' + multNow() : '');
+    lastHudScore = s; lastMult = multNow();
+  }
+  if (best !== lastHudBest) { el.best.textContent = 'BEST ' + best.toLocaleString(); lastHudBest = best; }
+  const comboTxt = (state === STATE.PLAY && run.combo > 0 && !run.fever)
+    ? run.combo + ' in a row' : '';
+  if (run.combo !== lastCombo || (comboTxt === '') !== (el.comboMsg.style.opacity === '0')) {
+    el.comboMsg.textContent = comboTxt;
+    el.comboMsg.style.opacity = comboTxt ? '1' : '0';
+    lastCombo = run.combo;
+  }
+  const feverOn = run.fever && state === STATE.PLAY;
+  if (feverOn !== lastFever) { el.fever.style.display = feverOn ? 'block' : 'none'; lastFever = feverOn; }
+  const warnOn = state === STATE.PLAY && (owl.x - run.duskX) < TUNE.dusk.panicGap;
+  if (warnOn !== lastWarn) { el.warn.style.opacity = warnOn ? '1' : '0'; lastWarn = warnOn; }
+  const bPct = Math.round(run.boost * 100);
+  if (bPct !== lastBoostPct) {
+    el.boostFill.style.width = bPct + '%';
+    el.boostWrap.classList.toggle('ready', bPct >= 100);
+    lastBoostPct = bPct;
+  }
+  const gapNow = owl.x - run.duskX;
+  // Never reads empty during a run: the night is always back there somewhere
+  const nPct = state === STATE.PLAY ? Math.round(clamp(1 - gapNow / TUNE.dusk.maxGap, 0.2, 1) * 100) : 0;
+  if (nPct !== lastNightPct) {
+    el.nightFill.style.width = nPct + '%';
+    el.nightWrap.classList.toggle('close', state === STATE.PLAY && gapNow < TUNE.dusk.panicGap);
+    lastNightPct = nPct;
+  }
+}
+
+/* =====================================================================
+   Render
+   ===================================================================== */
+function w2sX(wx, scale) { return (wx - camX) * scale + W * TUNE.view.anchorX; }
+function w2sY(wy, scale) { return (wy - camY) * scale + H * TUNE.view.anchorY; }
+
+function render() {
+  const scale = (H / TUNE.view.virtualHeight) * zoom;
+  const d = run.darkness;
+
+  // ---- Sky ----
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, mix(PAL.skyTop[0], PAL.skyTop[1], d));
+  sky.addColorStop(0.55, mix(PAL.skyMid[0], PAL.skyMid[1], d));
+  sky.addColorStop(1, mix(PAL.skyLow[0], PAL.skyLow[1], d));
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // ---- Stars (fade in with darkness) ----
+  if (d > 0.15) {
+    const a = (d - 0.15) / 0.85;
+    for (const st of stars) {
+      ctx.globalAlpha = a * (0.5 + 0.5 * Math.sin(run.time * 2 + st.tw));
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(st.x, st.y, st.r, st.r);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- Sun: hides behind the ridgeline, only earned by flying high ----
+  const gap = clamp((owl.x - run.duskX) / TUNE.dusk.startGap, 0, 1.6);
+  // Horizon sinks as the camera climbs, so altitude reads on the backdrop too
+  const horizon = clamp(H * 0.58 + (groundSm - camY) * scale * 0.4, H * 0.30, H * 1.35);
+  const altNow = Math.max(0, terrain.heightAt(owl.x) - owl.y);
+  const sunA = clamp((altNow - TUNE.sky.sunShowAlt) / (TUNE.sky.sunFullAlt - TUNE.sky.sunShowAlt), 0, 1);
+  const sunX = W * 0.72;
+  const sunY = lerp(horizon + H * 0.06, horizon - H * 0.30, clamp(gap, 0, 1) * (0.4 + 0.6 * sunA));
+  const sunR = Math.max(H * 0.055, 24);
+  if (sunA > 0.01) {
+    ctx.globalAlpha = sunA;
+    const glow = ctx.createRadialGradient(sunX, sunY, sunR * 0.3, sunX, sunY, sunR * 4.5);
+    glow.addColorStop(0, 'rgba(255,190,110,' + (0.6 * (1 - d)) + ')');
+    glow.addColorStop(1, 'rgba(255,190,110,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(sunX - sunR * 4.5, sunY - sunR * 4.5, sunR * 9, sunR * 9);
+    const sunBody = ctx.createRadialGradient(sunX - sunR * 0.3, sunY - sunR * 0.3, sunR * 0.1, sunX, sunY, sunR);
+    sunBody.addColorStop(0, mix([255, 240, 200], [200, 170, 170], d));
+    sunBody.addColorStop(1, mix([255, 196, 100], [170, 140, 150], d));
+    ctx.fillStyle = sunBody;
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, 6.2832); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- Adirondack silhouettes (parallax), then Lake Champlain in front ----
+  drawMountains(0.12, horizon + H * 0.005, H * 0.16, mix(PAL.mtnFar[0], PAL.mtnFar[1], d), 0.9);
+  drawMountains(0.24, horizon + H * 0.03, H * 0.12, mix(PAL.mtnNear[0], PAL.mtnNear[1], d), 1.7);
+  if (horizon < H) {
+    const lakeG = ctx.createLinearGradient(0, horizon, 0, H);
+    lakeG.addColorStop(0, mix(PAL.lake[0], PAL.lake[1], d));
+    lakeG.addColorStop(1, mix([190, 120, 100], [16, 18, 44], d));
+    ctx.fillStyle = lakeG;
+    ctx.fillRect(0, horizon, W, H - horizon);
+    // Sun glimmer path on the water, only when the sun is out
+    if (sunA > 0.01) {
+      ctx.globalAlpha = 0.3 * (1 - d) * sunA;
+      ctx.fillStyle = '#ffe0a8';
+      for (let gy = 0; gy < 7; gy++) {
+        const wob = Math.sin(run.time * 2 + gy * 1.7) * sunR * 0.15;
+        ctx.fillRect(sunX - sunR * (0.75 - gy * 0.06) + wob, horizon + 4 + gy * (H * 0.012), sunR * (1.5 - gy * 0.12), H * 0.006);
+      }
+      ctx.globalAlpha = 1;
+    }
+    // Sailboats out on the broad lake
+    ctx.globalAlpha = 0.9 * (1 - d * 0.8);
+    for (let sb = 0; sb < 3; sb++) {
+      const bxr = ((sb * 2231 + 700 - camX * 0.06) % (W + 360) + W + 360) % (W + 360) - 180;
+      const byr = horizon + H * (0.018 + sb * 0.012);
+      const bs = (H * 0.016) * (1 + sb * 0.35);
+      ctx.fillStyle = mix([250, 246, 238], [150, 150, 190], d);
+      ctx.beginPath();
+      ctx.moveTo(bxr, byr); ctx.lineTo(bxr, byr - bs * 1.7); ctx.lineTo(bxr + bs * 0.9, byr); ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = mix([90, 62, 54], [30, 28, 52], d);
+      ctx.beginPath();
+      ctx.moveTo(bxr - bs * 0.55, byr); ctx.lineTo(bxr + bs * 1.1, byr);
+      ctx.lineTo(bxr + bs * 0.8, byr + bs * 0.34); ctx.lineTo(bxr - bs * 0.3, byr + bs * 0.34); ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // Champ, briefly, if you are lucky
+    if (run.champT >= 0) {
+      const p = run.champT;
+      const rise = p < 0.9 ? 1 - Math.pow(1 - p / 0.9, 2) : p < 3.2 ? 1 : Math.max(0, 1 - (p - 3.2) / 1.2);
+      const cxp = run.champX * W, base = horizon + H * 0.03;
+      const nh = H * 0.10 * rise;
+      const champCol = mix([46, 96, 84], [24, 44, 48], d);
+      ctx.strokeStyle = champCol; ctx.fillStyle = champCol;
+      ctx.lineCap = 'round';
+      // humps
+      for (let hmp = 0; hmp < 2; hmp++) {
+        ctx.beginPath();
+        ctx.arc(cxp - H * (0.055 + hmp * 0.055), base + 2, H * 0.020 * rise, Math.PI, 0);
+        ctx.fill();
+      }
+      // neck + head
+      ctx.lineWidth = Math.max(3, H * 0.013);
+      ctx.beginPath();
+      ctx.moveTo(cxp, base + 2);
+      ctx.quadraticCurveTo(cxp + nh * 0.35, base - nh * 0.6, cxp + nh * 0.12, base - nh);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(cxp + nh * 0.12, base - nh, H * 0.016, H * 0.010, -0.25, 0, 6.2832);
+      ctx.fill();
+      if (rise > 0.9) {
+        ctx.fillStyle = '#ffe9c4';
+        ctx.beginPath(); ctx.arc(cxp + nh * 0.16, base - nh - H * 0.003, Math.max(1.2, H * 0.0028), 0, 6.2832); ctx.fill();
+      }
+      // ripples
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.35 * rise * (1 - d)) + ')';
+      ctx.lineWidth = 1.5;
+      for (let rp = 0; rp < 2; rp++) {
+        ctx.beginPath();
+        ctx.ellipse(cxp, base + 4, H * (0.03 + rp * 0.022 + (p % 1) * 0.01), H * 0.006, 0, 0, 6.2832);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // ---- Clouds (soft layered puffs, lit from above) ----
+  const cloudTop = mix([255, 252, 248], [110, 112, 160], d);
+  const cloudShade = mix([222, 214, 226], [70, 72, 118], d);
+  for (const c of terrain.clouds) {
+    const cx = w2sX(c.x, scale), cy = w2sY(c.y + Math.sin(run.time * 0.5 + c.puff) * 12, scale);
+    if (cx < -300 || cx > W + 300 || cy < -200 || cy > H + 200) continue;
+    const cw = c.w * scale;
+    ctx.globalAlpha = 0.92;
+    // flat shaded base
+    ctx.fillStyle = cloudShade;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + cw * 0.14, cw * 1.02, cw * 0.20, 0, 0, 6.2832);
+    ctx.fill();
+    // sunlit puffs
+    ctx.fillStyle = cloudTop;
+    ctx.beginPath();
+    ctx.arc(cx - cw * 0.55, cy + cw * 0.05, cw * 0.30, 0, 6.2832);
+    ctx.arc(cx - cw * 0.18, cy - cw * 0.14, cw * 0.42, 0, 6.2832);
+    ctx.arc(cx + cw * 0.25, cy - cw * 0.05, cw * 0.36, 0, 6.2832);
+    ctx.arc(cx + cw * 0.6, cy + cw * 0.07, cw * 0.26, 0, 6.2832);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- Scenery flocks of small birds ----
+  ctx.strokeStyle = mix([70, 66, 80], [30, 30, 50], d);
+  ctx.lineWidth = Math.max(1.2, 2.2 * scale);
+  ctx.lineCap = 'round';
+  for (const f of terrain.flocks) {
+    const fx = w2sX(f.x, scale), fy = w2sY(f.y, scale);
+    if (fx < -120 || fx > W + 120 || fy < -80 || fy > H + 80) continue;
+    for (let j = 0; j < f.n; j++) {
+      const bx2 = fx - j * 26 * scale, by2 = fy + (j % 2) * 16 * scale;
+      const wing = Math.sin(run.time * 7 + f.flap + j * 0.9) * 5 * scale;
+      ctx.beginPath();
+      ctx.moveTo(bx2 - 7 * scale, by2 - wing);
+      ctx.quadraticCurveTo(bx2, by2 + 3 * scale, bx2 + 7 * scale, by2 - wing);
+      ctx.stroke();
+    }
+  }
+  for (const b of terrain.balloons) {
+    const sway = Math.sin(run.time * 0.6 + b.bob);
+    const bx = w2sX(b.x, scale), by = w2sY(b.y + sway * 30, scale);
+    if (bx < -200 || bx > W + 200 || by < -200 || by > H + 200) continue;
+    if (b.kind === 'para') {
+      // Paraglider: curved canopy, lines, pilot
+      const pr = 46 * scale, tilt = sway * 0.12;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(tilt);
+      const canopy = b.hue ? mix([220, 80, 70], [110, 55, 75], d) : mix([70, 140, 190], [45, 60, 110], d);
+      ctx.fillStyle = canopy;
+      ctx.beginPath();
+      ctx.moveTo(-pr, 0);
+      ctx.quadraticCurveTo(0, -pr * 0.62, pr, 0);
+      ctx.quadraticCurveTo(0, -pr * 0.30, -pr, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(50,45,60,0.6)';
+      ctx.lineWidth = Math.max(1, 1.3 * scale);
+      ctx.beginPath();
+      ctx.moveTo(-pr * 0.8, -pr * 0.04); ctx.lineTo(0, pr * 0.72);
+      ctx.moveTo(pr * 0.8, -pr * 0.04); ctx.lineTo(0, pr * 0.72);
+      ctx.moveTo(-pr * 0.3, -pr * 0.3); ctx.lineTo(0, pr * 0.72);
+      ctx.moveTo(pr * 0.3, -pr * 0.3); ctx.lineTo(0, pr * 0.72);
+      ctx.stroke();
+      ctx.fillStyle = mix([60, 52, 66], [30, 28, 44], d);
+      ctx.beginPath();
+      ctx.ellipse(0, pr * 0.80, pr * 0.10, pr * 0.18, 0, 0, 6.2832);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      // Hot air balloon with gores and shading
+      const br = 52 * scale;
+      const base = b.hue ? [214, 74, 60] : [236, 168, 60];
+      const balloonG = ctx.createRadialGradient(bx - br * 0.4, by - br * 0.4, br * 0.15, bx, by, br * 1.2);
+      balloonG.addColorStop(0, mix([Math.min(255, base[0] + 40), Math.min(255, base[1] + 40), base[2] + 40], [130, 90, 100], d));
+      balloonG.addColorStop(1, mix(base, [90, 50, 70], d));
+      ctx.fillStyle = balloonG;
+      ctx.beginPath();
+      ctx.ellipse(bx, by, br, br * 1.15, 0, 0, 6.2832);
+      ctx.fill();
+      // gores
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = Math.max(1, 1.6 * scale);
+      for (const gx of [-0.55, 0, 0.55]) {
+        ctx.beginPath();
+        ctx.ellipse(bx, by, br * Math.abs(gx) + br * 0.12, br * 1.15, 0, -1.35, 1.35);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(60,45,40,0.7)';
+      ctx.beginPath();
+      ctx.moveTo(bx - br * 0.4, by + br * 1.05); ctx.lineTo(bx - br * 0.2, by + br * 1.62);
+      ctx.moveTo(bx + br * 0.4, by + br * 1.05); ctx.lineTo(bx + br * 0.2, by + br * 1.62);
+      ctx.stroke();
+      ctx.fillStyle = mix([120, 84, 55], [60, 45, 50], d);
+      const bw = br * 0.44, bh = br * 0.36;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(bx - bw / 2, by + br * 1.58, bw, bh, 3 * scale);
+      else ctx.rect(bx - bw / 2, by + br * 1.58, bw, bh);
+      ctx.fill();
+    }
+  }
+
+  // ---- Terrain: ground colors follow the zone you are in ----
+  const pal = terrain.palAt(camX);
+  const hazeDay = [pal[1][0] * 0.35 + 236 * 0.65, pal[1][1] * 0.35 + 205 * 0.65, pal[1][2] * 0.35 + 168 * 0.65];
+  // a soft far ridge in the local ground color, for depth
+  drawMountains(0.42, horizon - H * 0.015, H * 0.09, mix([pal[1][0] * 0.6 + 100, pal[1][1] * 0.6 + 95, pal[1][2] * 0.6 + 110], [40, 40, 74], d), 2.4);
+  const fill = ctx.createLinearGradient(0, H * 0.2, 0, H);
+  fill.addColorStop(0, mix(pal[0], PAL.snowTop[1], d));
+  fill.addColorStop(0.55, mix(pal[1], PAL.snowLow[1], d));
+  fill.addColorStop(1, mix(hazeDay, [40, 42, 80], d));
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  const step = 6;
+  let firstY = 0;
+  for (let sx = -step; sx <= W + step; sx += step) {
+    const wx = (sx - W * TUNE.view.anchorX) / scale + camX;
+    const sy = w2sY(terrain.heightAt(wx), scale);
+    if (sx === -step) { ctx.moveTo(sx, sy); firstY = sy; }
+    else ctx.lineTo(sx, sy);
+  }
+  ctx.lineTo(W + step, H + 4); ctx.lineTo(-step, H + 4);
+  ctx.closePath();
+  ctx.fill();
+  // Sunset rim light on the snow
+  ctx.strokeStyle = mix(PAL.rim[0], PAL.rim[1], d);
+  ctx.globalAlpha = 0.85;
+  ctx.lineWidth = Math.max(2, 3 * scale);
+  ctx.beginPath();
+  for (let sx = -step; sx <= W + step; sx += step) {
+    const wx = (sx - W * TUNE.view.anchorX) / scale + camX;
+    const sy = w2sY(terrain.heightAt(wx), scale);
+    if (sx === -step) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // ---- Vermont scenery on the hills ----
+  for (const dc of terrain.decos) {
+    const sx = w2sX(dc.x, scale);
+    if (sx < -120 || sx > W + 120) continue;
+    const sy = w2sY(terrain.heightAt(dc.x), scale);
+    if (sy < -160 || sy > H + 160) continue;
+    drawDeco(dc, sx, sy, scale, d);
+  }
+
+  // ---- Creemee stands ----
+  for (const st of terrain.stands) {
+    if (st.taken) continue;
+    const sx = w2sX(st.x, scale), sy = w2sY(st.y, scale);
+    if (sx < -80 || sx > W + 80 || sy < -80 || sy > H + 80) continue;
+    const s = 34 * scale;
+    // hut
+    ctx.fillStyle = mix([250, 246, 238], [150, 150, 190], d);
+    ctx.fillRect(sx - s * 0.55, sy - s * 1.0, s * 1.1, s * 1.0);
+    // striped awning
+    for (let a = 0; a < 4; a++) {
+      ctx.fillStyle = a % 2 ? mix([214, 74, 60], [110, 55, 75], d) : mix([250, 246, 238], [160, 160, 195], d);
+      ctx.fillRect(sx - s * 0.7 + a * s * 0.35, sy - s * 1.28, s * 0.35, s * 0.3);
+    }
+    // creemee sign: cone + swirl
+    ctx.fillStyle = mix([214, 168, 110], [130, 110, 100], d);
+    ctx.beginPath();
+    ctx.moveTo(sx - s * 0.14, sy - s * 1.32); ctx.lineTo(sx + s * 0.14, sy - s * 1.32); ctx.lineTo(sx, sy - s * 1.02);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = mix([248, 236, 210], [170, 170, 200], d);
+    ctx.beginPath();
+    ctx.arc(sx, sy - s * 1.42, s * 0.16, 0, 6.2832);
+    ctx.arc(sx, sy - s * 1.56, s * 0.11, 0, 6.2832);
+    ctx.fill();
+  }
+
+  // ---- Hoops ----
+  for (const rg of terrain.rings) {
+    if (rg.hit) continue;
+    const rx = w2sX(rg.x, scale), ry = w2sY(rg.y, scale);
+    if (rx < -80 || rx > W + 80 || ry < -180 || ry > H + 180) continue;
+    const rr = rg.r * scale;
+    const pulse = 1 + Math.sin(run.time * 3 + rg.spin) * 0.05;
+    ctx.lineWidth = Math.max(3, 9 * scale);
+    ctx.strokeStyle = mix([255, 205, 90], [190, 160, 110], d);
+    ctx.beginPath();
+    ctx.ellipse(rx, ry, rr * 0.28 * pulse, rr * pulse, 0, 0, 6.2832);
+    ctx.stroke();
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = '#fff2c8';
+    ctx.lineWidth = Math.max(1.5, 3.5 * scale);
+    ctx.beginPath();
+    ctx.ellipse(rx - rr * 0.06, ry, rr * 0.24 * pulse, rr * 0.95 * pulse, 0, 0, 6.2832);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- Maple coins (spinning) ----
+  for (const c of terrain.coins) {
+    if (c.taken) continue;
+    const cx = w2sX(c.x, scale), cy = w2sY(c.y, scale);
+    if (cx < -40 || cx > W + 40 || cy < -40 || cy > H + 40) continue;
+    const spin = Math.cos(run.time * 5 + c.phase);
+    const cr = 15 * scale;
+    ctx.fillStyle = mix([255, 200, 70], [180, 150, 90], d);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, Math.max(cr * 0.12, cr * Math.abs(spin)), cr, 0, 0, 6.2832);
+    ctx.fill();
+    ctx.strokeStyle = mix([200, 140, 30], [130, 100, 60], d);
+    ctx.lineWidth = Math.max(1, 2 * scale);
+    ctx.stroke();
+    if (Math.abs(spin) > 0.5) {
+      // maple leaf stamp
+      ctx.fillStyle = mix([200, 120, 30], [140, 95, 55], d);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(Math.abs(spin), 1);
+      ctx.beginPath();
+      ctx.moveTo(0, -cr * 0.5);
+      ctx.lineTo(cr * 0.42, 0); ctx.lineTo(cr * 0.15, cr * 0.05);
+      ctx.lineTo(cr * 0.2, cr * 0.5); ctx.lineTo(0, cr * 0.2);
+      ctx.lineTo(-cr * 0.2, cr * 0.5); ctx.lineTo(-cr * 0.15, cr * 0.05);
+      ctx.lineTo(-cr * 0.42, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ---- Particles ----
+  for (const p of particles) {
+    const a = 1 - p.age / p.life;
+    ctx.globalAlpha = a * (p.mist ? 0.15 : 0.9);
+    ctx.fillStyle = 'rgb(' + p.color + ')';
+    const sx = w2sX(p.x, scale), sy = w2sY(p.y, scale);
+    ctx.beginPath(); ctx.arc(sx, sy, p.size * scale, 0, 6.2832); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ---- Pace ghost of your best run ----
+  if (ghost && ghost.d && state === STATE.PLAY) {
+    const gi = run.time / ghost.dt;
+    const i0 = Math.floor(gi);
+    if (i0 < ghost.d.length - 1) {
+      const gd = lerp(ghost.d[i0], ghost.d[i0 + 1], gi - i0);
+      const gx = run.startX + gd;
+      const gsx = w2sX(gx, scale);
+      if (gsx > -120 && gsx < W + 120) {
+        const hop = Math.max(0, Math.sin(run.time * 1.3)) * 200;
+        const gsy = w2sY(terrain.heightAt(gx) - 60 - hop, scale);
+        ctx.globalAlpha = 0.32;
+        ctx.save();
+        ctx.translate(gsx, gsy);
+        ctx.scale(scale, scale);
+        drawBirdBody(birdKind, TUNE.owl.radius, { wingT: 0.5, flap: Math.sin(run.time * 9) * 0.4, eyesClosed: false, squash: 0 });
+        ctx.restore();
+        ctx.globalAlpha = 0.5;
+        ctx.font = '700 ' + Math.max(9, Math.round(11 * scale + 4)) + 'px -apple-system, "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#dfe6ff';
+        ctx.fillText('you (best)', gsx, gsy - 44 * scale);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // ---- Fellow travelers, rivals, then the star of the show ----
+  drawTravelers(scale);
+  drawRival(scale);
+  if (state === STATE.INTRO || state === STATE.MENU) {
+    // the nest, before the day starts
+    const nx = w2sX(owl.x, scale), ny = w2sY(owl.y, scale);
+    ctx.fillStyle = mix([124, 92, 58], [70, 58, 60], d);
+    ctx.beginPath();
+    ctx.ellipse(nx, ny + 6 * scale, 42 * scale, 16 * scale, 0, 0, 6.2832);
+    ctx.fill();
+    ctx.strokeStyle = mix([96, 68, 40], [54, 44, 52], d);
+    ctx.lineWidth = Math.max(1, 2 * scale);
+    for (let tw = 0; tw < 5; tw++) {
+      ctx.beginPath();
+      ctx.moveTo(nx - 40 * scale + tw * 18 * scale, ny + 10 * scale);
+      ctx.lineTo(nx - 24 * scale + tw * 18 * scale, ny - 2 * scale);
+      ctx.stroke();
+    }
+  }
+  drawOwl(scale);
+
+  // ---- Popups ----
+  for (const p of popups) {
+    const t = p.age / p.life;
+    ctx.globalAlpha = 1 - t * t;
+    ctx.fillStyle = p.color;
+    ctx.font = '800 ' + Math.round(p.size * scale + t * 6) + 'px -apple-system, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.text, w2sX(p.x, scale), w2sY(p.y, scale) - t * 50);
+  }
+  ctx.globalAlpha = 1;
+
+  // ---- Night wall ----
+  const duskSX = w2sX(run.duskX, scale);
+  if (duskSX > -50) {
+    const fadeW = Math.max(240, W * 0.22);
+    const ng = ctx.createLinearGradient(duskSX - 10, 0, duskSX + fadeW, 0);
+    ng.addColorStop(0, 'rgba(7,6,28,0.97)');
+    ng.addColorStop(1, 'rgba(7,6,28,0)');
+    ctx.fillStyle = ng;
+    ctx.fillRect(Math.min(0, duskSX - 10) - 2, 0, Math.max(0, duskSX + 10) + fadeW + 4, H);
+    // A thin violet edge on the front of the night
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = 'rgba(120,90,220,0.5)';
+    ctx.fillRect(duskSX + fadeW * 0.05, 0, 3, H);
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- Warning vignette ----
+  if (d > 0.25 && state === STATE.PLAY) {
+    const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95);
+    v.addColorStop(0, 'rgba(10,8,40,0)');
+    v.addColorStop(1, 'rgba(10,8,40,' + (0.45 * (d - 0.25) / 0.75) + ')');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawMountains(parallax, baseY, height, color, freqMul) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, baseY);
+  const off = camX * parallax;
+  for (let sx = 0; sx <= W; sx += 8) {
+    const t = (sx + off) * 0.004 * freqMul;
+    const h = (Math.sin(t) * 0.5 + Math.sin(t * 2.17 + 1.3) * 0.3 + Math.sin(t * 0.53 + 4.2) * 0.6);
+    ctx.lineTo(sx, baseY - Math.max(0, h) * height - height * 0.15);
+  }
+  ctx.lineTo(W, baseY + H); ctx.lineTo(0, baseY + H);
+  ctx.closePath();
+  ctx.fill();
+}
+
+const BIRD_COLORS = {
+  owl:      { body: '#fdfcf8', belly: 'rgba(190,190,215,0.35)', wing: '#eceae4', tail: '#e8e4de', head: '#ffffff', beak: '#4a4a58', crest: null,     eye: '#f6c445', bigEyes: true,  barring: true },
+  cardinal: { body: '#d8402f', belly: 'rgba(120,20,20,0.30)',   wing: '#b32d20', tail: '#a02818', head: '#e04a36', beak: '#e8903c', crest: '#c03424', eye: '#ffffff', bigEyes: false, mask: '#2a1416' },
+  jay:      { body: '#5b8fd9', belly: 'rgba(255,255,255,0.75)', wing: '#3f6fbe', tail: '#3a63ab', head: '#6b9be2', beak: '#3a3a48', crest: '#4f7fcc', eye: '#ffffff', bigEyes: false, necklace: '#26262e' },
+  thrush:   { body: '#b98e63', belly: 'rgba(246,238,218,0.9)',  wing: '#a1794e', tail: '#b56a3c', head: '#c09a6c', beak: '#6a5340', crest: null,     eye: '#ffffff', bigEyes: false, spots: '#7a5a3c' },
+};
+
+// Draws a bird at the origin, facing right. pose: {wingT, flap, eyesClosed, squash}
+function drawBirdBody(kind, r, pose) {
+  const C = BIRD_COLORS[kind] || BIRD_COLORS.owl;
+  ctx.save();
+  ctx.scale(1 + 0.18 * pose.squash, 1 - 0.24 * pose.squash);
+
+  // Tail feathers
+  ctx.fillStyle = C.tail;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.7, -r * 0.1);
+  ctx.lineTo(-r * 1.55, -r * 0.45);
+  ctx.lineTo(-r * 1.45, r * 0.25);
+  ctx.closePath();
+  ctx.fill();
+
+  // Body
+  ctx.fillStyle = C.body;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 1.12, r * 0.92, 0, 0, 6.2832);
+  ctx.fill();
+  // Belly
+  ctx.fillStyle = C.belly;
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.1, r * 0.35, r * 0.8, r * 0.45, 0, 0, 6.2832);
+  ctx.fill();
+  if (C.barring) {
+    ctx.strokeStyle = 'rgba(90,90,110,0.5)';
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(-r * 0.35 + i * r * 0.28, r * 0.1 + (i % 2) * r * 0.22, r * 0.16, 0.4, 2.6);
+      ctx.stroke();
+    }
+  }
+  if (C.spots) {
+    // hermit thrush breast spotting
+    ctx.fillStyle = C.spots;
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.arc(-r * 0.4 + (i % 3) * r * 0.34, r * 0.18 + Math.floor(i / 3) * r * 0.26, r * 0.06, 0, 6.2832);
+      ctx.fill();
+    }
+  }
+
+  // Wing: tucked when diving, swept up when soaring, flapping in between
+  const wingAngle = lerp(-0.55, 0.55, pose.wingT) + pose.flap;
+  ctx.save();
+  ctx.translate(-r * 0.15, -r * 0.1);
+  ctx.rotate(wingAngle);
+  ctx.fillStyle = C.wing;
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.45, 0, r * 0.85, r * 0.38, 0, 0, 6.2832);
+  ctx.fill();
+  if (kind === 'jay') {
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = r * 0.09;
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.05, r * 0.05); ctx.quadraticCurveTo(-r * 0.45, r * 0.24, r * 0.1, r * 0.1);
+    ctx.stroke();
+  } else if (C.barring) {
+    ctx.strokeStyle = 'rgba(90,90,110,0.4)';
+    ctx.beginPath();
+    ctx.arc(-r * 0.55, 0, r * 0.22, 0.4, 2.6);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Crest (cardinal, jay)
+  if (C.crest) {
+    ctx.fillStyle = C.crest;
+    ctx.beginPath();
+    ctx.moveTo(r * 0.45, -r * 0.95);
+    ctx.quadraticCurveTo(r * 0.42, -r * 1.55, r * 0.14, -r * 1.42);
+    ctx.quadraticCurveTo(r * 0.5, -r * 1.28, r * 0.32, -r * 0.82);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(r * 0.62, -r * 0.98);
+    ctx.quadraticCurveTo(r * 0.72, -r * 1.5, r * 0.42, -r * 1.5);
+    ctx.quadraticCurveTo(r * 0.66, -r * 1.22, r * 0.48, -r * 0.86);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Head
+  ctx.fillStyle = C.head;
+  ctx.beginPath();
+  ctx.arc(r * 0.72, -r * 0.55, r * 0.62, 0, 6.2832);
+  ctx.fill();
+
+  const ex = r * 0.86, ey = -r * 0.62;
+  // Cardinal's black mask around the beak
+  if (C.mask) {
+    ctx.fillStyle = C.mask;
+    ctx.beginPath();
+    ctx.ellipse(ex + r * 0.3, ey + r * 0.14, r * 0.34, r * 0.22, -0.2, 0, 6.2832);
+    ctx.fill();
+  }
+  // Blue jay's necklace
+  if (C.necklace) {
+    ctx.strokeStyle = C.necklace;
+    ctx.lineWidth = r * 0.10;
+    ctx.beginPath();
+    ctx.arc(r * 0.55, -r * 0.4, r * 0.72, 0.5, 1.7);
+    ctx.stroke();
+  }
+
+  // Eyes
+  if (pose.eyesClosed) {
+    ctx.strokeStyle = '#3a3a4a';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(ex - r * 0.28, ey); ctx.quadraticCurveTo(ex - r * 0.13, ey + r * 0.12, ex + r * 0.02, ey); ctx.stroke();
+    if (C.bigEyes) { ctx.beginPath(); ctx.moveTo(ex + r * 0.14, ey); ctx.quadraticCurveTo(ex + r * 0.29, ey + r * 0.12, ex + r * 0.44, ey); ctx.stroke(); }
+  } else if (C.bigEyes) {
+    ctx.fillStyle = C.eye;
+    ctx.beginPath(); ctx.arc(ex - r * 0.14, ey, r * 0.24, 0, 6.2832); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex + r * 0.32, ey, r * 0.24, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = '#1d1d28';
+    ctx.beginPath(); ctx.arc(ex - r * 0.09, ey, r * 0.11, 0, 6.2832); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex + r * 0.37, ey, r * 0.11, 0, 6.2832); ctx.fill();
+  } else {
+    ctx.fillStyle = '#1d1d28';
+    ctx.beginPath(); ctx.arc(ex + r * 0.02, ey - r * 0.06, r * 0.13, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(ex + r * 0.06, ey - r * 0.10, r * 0.045, 0, 6.2832); ctx.fill();
+  }
+
+  // Beak: opens with joy at speed and in Fever; a coin triggers a big cute CHOMP
+  const chompOpen = pose.chomp ? Math.sin(Math.min(1, pose.chomp) * Math.PI) * 1.6 : 0;
+  const open = Math.min(1.6, Math.max(pose.joy > 0.35 ? (pose.joy - 0.35) / 0.65 : 0, chompOpen));
+  ctx.fillStyle = C.beak;
+  if (open > 0.05) {
+    const gap = open * r * 0.18;
+    ctx.beginPath();
+    ctx.moveTo(ex + r * 0.40, ey + r * 0.12 - gap * 0.4);
+    ctx.lineTo(ex + r * 0.70, ey + r * 0.10 - gap);
+    ctx.lineTo(ex + r * 0.42, ey + r * 0.24 - gap * 0.5);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(ex + r * 0.40, ey + r * 0.24 + gap * 0.3);
+    ctx.lineTo(ex + r * 0.66, ey + r * 0.34 + gap);
+    ctx.lineTo(ex + r * 0.38, ey + r * 0.38 + gap * 0.5);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7c2f38';
+    ctx.beginPath();
+    ctx.moveTo(ex + r * 0.42, ey + r * 0.20);
+    ctx.lineTo(ex + r * 0.60, ey + r * 0.22);
+    ctx.lineTo(ex + r * 0.42, ey + r * 0.28);
+    ctx.closePath(); ctx.fill();
+    if (open > 0.8) {
+      // little tongue mid-chomp
+      ctx.fillStyle = '#e88a94';
+      ctx.beginPath();
+      ctx.ellipse(ex + r * 0.48, ey + r * 0.26, r * 0.08, r * 0.05, 0.2, 0, 6.2832);
+      ctx.fill();
+    }
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(ex + r * 0.42, ey + r * 0.10);
+    ctx.lineTo(ex + r * 0.68, ey + r * 0.24);
+    ctx.lineTo(ex + r * 0.38, ey + r * 0.36);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawOwl(scale) {
+  const r = TUNE.owl.radius;
+  const sx = w2sX(owl.x, scale), sy = w2sY(owl.y - r * 0.8, scale);
+  const asleep = state === STATE.OVER;
+  const soaring = !owl.grounded && !holding && state === STATE.PLAY;
+
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(scale, scale);
+  ctx.rotate(owl.angle);
+
+  // Fever glow
+  if (run.fever && state === STATE.PLAY) {
+    const g = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r * 2.6);
+    g.addColorStop(0, 'rgba(255,200,80,0.55)');
+    g.addColorStop(1, 'rgba(255,200,80,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, r * 2.6, 0, 6.2832); ctx.fill();
+  }
+
+  const spdNow = Math.hypot(owl.vx, owl.vy);
+  const joy = state !== STATE.PLAY ? 0
+    : run.fever ? 1
+    : Math.max(clamp((spdNow - 1500) / 1100, 0, 1), (!owl.grounded && owl.airTime > 0.5) ? 0.85 : 0);
+  drawBirdBody(birdKind, r, {
+    wingT: owl.wingT,
+    flap: soaring ? Math.sin(run.time * 11) * 0.45 : 0,
+    eyesClosed: asleep || owl.blink > 0 || owl.chomp > 0.45,
+    squash: owl.squash,
+    joy,
+    chomp: owl.chomp,
+  });
+  ctx.restore();
+}
+
+// One little piece of Vermont, planted at screen point (sx, sy) on the surface
+function drawDeco(dc, sx, sy, scale, d) {
+  const s = 30 * dc.size * scale;
+  const sway = Math.sin(run.time * 1.1 + dc.seed * 9) * 0.03;
+  switch (dc.type) {
+    case 'maple':
+    case 'mapleFall': {
+      ctx.strokeStyle = mix([94, 70, 52], [44, 38, 52], d);
+      ctx.lineWidth = Math.max(1.5, s * 0.12);
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + sway * s * 4, sy - s * 0.8); ctx.stroke();
+      const fall = dc.type === 'mapleFall';
+      const cTop = fall ? (dc.seed < 0.5 ? [226, 118, 60] : [206, 74, 58]) : [96, 152, 84];
+      const cBot = fall ? [160, 72, 44] : [62, 112, 62];
+      const cg = ctx.createRadialGradient(sx - s * 0.2, sy - s * 1.25, s * 0.1, sx, sy - s * 1.05, s * 0.75);
+      cg.addColorStop(0, mix(cTop, [70, 70, 110], d));
+      cg.addColorStop(1, mix(cBot, [42, 44, 78], d));
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(sx + sway * s * 4, sy - s * 1.05, s * 0.62, 0, 6.2832);
+      ctx.arc(sx - s * 0.38 + sway * s * 3, sy - s * 0.82, s * 0.4, 0, 6.2832);
+      ctx.arc(sx + s * 0.4 + sway * s * 3, sy - s * 0.85, s * 0.42, 0, 6.2832);
+      ctx.fill();
+      break;
+    }
+    case 'pine':
+    case 'pineSnow': {
+      ctx.strokeStyle = mix([88, 64, 48], [40, 36, 50], d);
+      ctx.lineWidth = Math.max(1.5, s * 0.1);
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy - s * 0.35); ctx.stroke();
+      ctx.fillStyle = mix([56, 96, 66], [30, 48, 54], d);
+      for (let t = 0; t < 3; t++) {
+        const w = s * (0.62 - t * 0.16), yTop = sy - s * (0.55 + t * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(sx - w + sway * s, yTop + s * 0.52);
+        ctx.lineTo(sx + sway * s * (1 + t * 0.4), yTop - s * 0.12);
+        ctx.lineTo(sx + w + sway * s, yTop + s * 0.52);
+        ctx.closePath(); ctx.fill();
+      }
+      if (dc.type === 'pineSnow') {
+        ctx.fillStyle = mix([244, 248, 252], [150, 156, 200], d);
+        ctx.beginPath();
+        ctx.moveTo(sx - s * 0.3, sy - s * 1.65); ctx.lineTo(sx, sy - s * 2.05); ctx.lineTo(sx + s * 0.3, sy - s * 1.65);
+        ctx.closePath(); ctx.fill();
+      }
+      break;
+    }
+    case 'barn': {
+      ctx.fillStyle = mix([168, 52, 44], [80, 40, 60], d);
+      ctx.fillRect(sx - s * 0.7, sy - s * 0.85, s * 1.4, s * 0.85);
+      ctx.fillStyle = mix([210, 214, 224], [110, 112, 150], d);
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.82, sy - s * 0.82); ctx.lineTo(sx, sy - s * 1.35); ctx.lineTo(sx + s * 0.82, sy - s * 0.82);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = mix([250, 250, 246], [150, 150, 190], d);
+      ctx.fillRect(sx - s * 0.16, sy - s * 0.55, s * 0.32, s * 0.55);
+      break;
+    }
+    case 'silo': {
+      ctx.fillStyle = mix([196, 200, 208], [104, 108, 148], d);
+      ctx.fillRect(sx - s * 0.24, sy - s * 1.5, s * 0.48, s * 1.5);
+      ctx.fillStyle = mix([150, 154, 168], [80, 84, 120], d);
+      ctx.beginPath(); ctx.arc(sx, sy - s * 1.5, s * 0.24, Math.PI, 0); ctx.fill();
+      break;
+    }
+    case 'cow': {
+      ctx.fillStyle = mix([246, 244, 240], [148, 148, 186], d);
+      ctx.beginPath(); ctx.ellipse(sx, sy - s * 0.32, s * 0.42, s * 0.24, 0, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = mix([40, 38, 40], [22, 22, 40], d);
+      ctx.beginPath();
+      ctx.ellipse(sx - s * 0.12, sy - s * 0.36, s * 0.13, s * 0.1, 0.4, 0, 6.2832);
+      ctx.ellipse(sx + s * 0.18, sy - s * 0.28, s * 0.1, s * 0.08, -0.3, 0, 6.2832);
+      ctx.fill();
+      ctx.fillStyle = mix([246, 244, 240], [148, 148, 186], d);
+      ctx.beginPath(); ctx.ellipse(sx - s * 0.46, sy - s * 0.22, s * 0.12, s * 0.1, 0.5, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = mix([220, 218, 214], [120, 120, 160], d);
+      ctx.lineWidth = Math.max(1.2, s * 0.07);
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.28, sy - s * 0.12); ctx.lineTo(sx - s * 0.28, sy);
+      ctx.moveTo(sx + s * 0.26, sy - s * 0.12); ctx.lineTo(sx + s * 0.26, sy);
+      ctx.stroke();
+      break;
+    }
+    case 'hay': {
+      ctx.fillStyle = mix([214, 178, 108], [116, 104, 96], d);
+      ctx.beginPath(); ctx.arc(sx, sy - s * 0.3, s * 0.3, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = mix([176, 140, 76], [90, 82, 84], d);
+      ctx.lineWidth = Math.max(1, s * 0.05);
+      ctx.beginPath(); ctx.arc(sx, sy - s * 0.3, s * 0.19, 0.6, 3.6); ctx.stroke();
+      break;
+    }
+    case 'fence': {
+      ctx.strokeStyle = mix([120, 92, 64], [58, 52, 66], d);
+      ctx.lineWidth = Math.max(1.3, s * 0.07);
+      for (let p = -1; p <= 1; p++) {
+        const px = sx + p * s * 0.5;
+        const py = w2sY(terrain.heightAt(dc.x + p * s * 0.5 / scale), scale);
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - s * 0.42); ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.5, w2sY(terrain.heightAt(dc.x - s * 0.5 / scale), scale) - s * 0.32);
+      ctx.lineTo(sx + s * 0.5, w2sY(terrain.heightAt(dc.x + s * 0.5 / scale), scale) - s * 0.32);
+      ctx.stroke();
+      break;
+    }
+    case 'corn': {
+      ctx.strokeStyle = mix([150, 168, 74], [76, 88, 78], d);
+      ctx.lineWidth = Math.max(1.2, s * 0.06);
+      for (let p = -2; p <= 2; p++) {
+        const px = sx + p * s * 0.22;
+        const py = w2sY(terrain.heightAt(dc.x + p * s * 0.22 / scale), scale);
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.quadraticCurveTo(px + sway * s * 3, py - s * 0.3, px + sway * s * 5, py - s * 0.55);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'steeple': {
+      ctx.fillStyle = mix([248, 246, 240], [148, 150, 190], d);
+      ctx.fillRect(sx - s * 0.3, sy - s * 1.0, s * 0.6, s * 1.0);
+      ctx.fillRect(sx - s * 0.16, sy - s * 1.45, s * 0.32, s * 0.5);
+      ctx.fillStyle = mix([120, 124, 140], [70, 72, 108], d);
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.2, sy - s * 1.42); ctx.lineTo(sx, sy - s * 1.85); ctx.lineTo(sx + s * 0.2, sy - s * 1.42);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = mix([90, 96, 120], [50, 54, 90], d);
+      ctx.fillRect(sx - s * 0.06, sy - s * 0.5, s * 0.12, s * 0.5);
+      break;
+    }
+    case 'lift': {
+      ctx.strokeStyle = mix([110, 116, 128], [62, 66, 100], d);
+      ctx.lineWidth = Math.max(1.6, s * 0.09);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy); ctx.lineTo(sx, sy - s * 1.5);
+      ctx.moveTo(sx - s * 0.45, sy - s * 1.42); ctx.lineTo(sx + s * 0.45, sy - s * 1.42);
+      ctx.stroke();
+      ctx.strokeStyle = mix([70, 74, 88], [40, 44, 74], d);
+      ctx.lineWidth = Math.max(1, s * 0.045);
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 1.6, sy - s * 1.62); ctx.lineTo(sx + s * 1.6, sy - s * 1.3);
+      ctx.stroke();
+      ctx.fillStyle = mix([170, 60, 50], [90, 44, 66], d);
+      ctx.fillRect(sx + s * 0.55, sy - s * 1.36, s * 0.16, s * 0.22);
+      break;
+    }
+    case 'rock': {
+      ctx.fillStyle = mix([158, 152, 146], [84, 82, 108], d);
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.42, sy);
+      ctx.lineTo(sx - s * 0.25, sy - s * 0.4);
+      ctx.lineTo(sx + s * 0.12, sy - s * 0.48);
+      ctx.lineTo(sx + s * 0.4, sy - s * 0.15);
+      ctx.lineTo(sx + s * 0.44, sy);
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'birch': {
+      ctx.strokeStyle = mix([236, 232, 224], [140, 142, 178], d);
+      ctx.lineWidth = Math.max(1.4, s * 0.09);
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + sway * s * 4, sy - s * 1.3); ctx.stroke();
+      ctx.strokeStyle = mix([60, 58, 56], [36, 36, 56], d);
+      ctx.lineWidth = Math.max(1, s * 0.05);
+      for (let b = 0; b < 3; b++) {
+        const by = sy - s * (0.4 + b * 0.32);
+        ctx.beginPath(); ctx.moveTo(sx - s * 0.05, by); ctx.lineTo(sx + s * 0.07, by - s * 0.03); ctx.stroke();
+      }
+      break;
+    }
+    case 'shanty': {
+      // ice fishing shanty out on the frozen lake
+      const shCol = dc.seed < 0.5 ? [178, 84, 66] : [82, 122, 138];
+      ctx.fillStyle = mix(shCol, [70, 60, 84], d);
+      ctx.fillRect(sx - s * 0.5, sy - s * 0.85, s * 1.0, s * 0.85);
+      ctx.fillStyle = mix([210, 214, 224], [110, 112, 150], d);
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.6, sy - s * 0.82); ctx.lineTo(sx, sy - s * 1.2); ctx.lineTo(sx + s * 0.6, sy - s * 0.82);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = mix([60, 56, 64], [36, 36, 56], d);
+      ctx.fillRect(sx + s * 0.16, sy - s * 1.28, s * 0.12, s * 0.3);
+      ctx.fillStyle = mix([40, 46, 60], [26, 28, 48], d);
+      ctx.fillRect(sx - s * 0.14, sy - s * 0.5, s * 0.28, s * 0.5);
+      // fishing hole
+      ctx.fillStyle = mix([70, 110, 150], [34, 48, 80], d);
+      ctx.beginPath();
+      ctx.ellipse(sx + s * 1.1, sy - s * 0.03, s * 0.22, s * 0.08, 0, 0, 6.2832);
+      ctx.fill();
+      break;
+    }
+    case 'sign': {
+      ctx.strokeStyle = mix([110, 116, 128], [62, 66, 100], d);
+      ctx.lineWidth = Math.max(2, s * 0.1);
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy - s * 1.5); ctx.stroke();
+      ctx.fillStyle = mix([28, 108, 66], [24, 60, 56], d);
+      const tw2 = s * 2.4;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(sx - tw2 / 2, sy - s * 2.15, tw2, s * 0.72, s * 0.1); ctx.fill(); }
+      else ctx.fillRect(sx - tw2 / 2, sy - s * 2.15, tw2, s * 0.72);
+      ctx.fillStyle = mix([245, 248, 244], [180, 186, 216], d);
+      ctx.font = '700 ' + Math.max(8, Math.round(s * 0.4)) + 'px -apple-system, "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(dc.text || 'Vermont', sx, sy - s * 1.68);
+      break;
+    }
+    case 'moose': {
+      ctx.fillStyle = mix([74, 56, 44], [38, 34, 50], d);
+      ctx.beginPath(); ctx.ellipse(sx, sy - s * 0.5, s * 0.45, s * 0.26, 0, 0, 6.2832); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx + s * 0.48, sy - s * 0.72, s * 0.17, s * 0.12, 0.35, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = mix([74, 56, 44], [38, 34, 50], d);
+      ctx.lineWidth = Math.max(1.4, s * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(sx - s * 0.25, sy - s * 0.28); ctx.lineTo(sx - s * 0.25, sy);
+      ctx.moveTo(sx + s * 0.22, sy - s * 0.28); ctx.lineTo(sx + s * 0.22, sy);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sx + s * 0.5, sy - s * 0.84); ctx.lineTo(sx + s * 0.38, sy - s * 1.1); ctx.lineTo(sx + s * 0.28, sy - s * 0.95);
+      ctx.moveTo(sx + s * 0.56, sy - s * 0.86); ctx.lineTo(sx + s * 0.66, sy - s * 1.08);
+      ctx.stroke();
+      break;
+    }
+  }
+}
+
+function drawRival(scale) {
+  for (const rv of rivals) {
+    const sx = w2sX(rv.x, scale), sy = w2sY(rv.y, scale);
+    if (sx < -150 || sx > W + 150 || sy < -150 || sy > H + 150) continue;
+    const rvAngle = rv.grounded
+      ? Math.atan2(terrain.slopeAt(rv.x), 1)
+      : clamp(Math.atan2(rv.vy, Math.max(rv.vx, 60)), -1.15, 1.25);
+    ctx.save();
+    ctx.translate(sx, sy - 20 * scale);
+    ctx.scale(scale, scale);
+    ctx.rotate(rvAngle);
+    drawBirdBody(rv.kind, TUNE.owl.radius, {
+      wingT: rv.holding ? 1 : 0,
+      flap: (!rv.grounded && !rv.holding) ? Math.sin(run.time * 10 + rv.flap) * 0.5 : 0,
+      eyesClosed: false,
+      squash: 0,
+    });
+    ctx.restore();
+    // Name tag, like a live player
+    const tagY = sy - 52 * scale;
+    ctx.font = '700 ' + Math.max(10, Math.round(13 * scale + 4)) + 'px -apple-system, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    const tw = ctx.measureText(rv.name).width;
+    ctx.fillStyle = 'rgba(18,14,44,0.55)';
+    const pad = 7;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(sx - tw / 2 - pad, tagY - 13, tw + pad * 2, 19, 9);
+      ctx.fill();
+    } else {
+      ctx.fillRect(sx - tw / 2 - pad, tagY - 13, tw + pad * 2, 19);
+    }
+    ctx.fillStyle = '#dfe6ff';
+    ctx.fillText(rv.name, sx, tagY + 1);
+  }
+}
+
+function drawTravelers(scale) {
+  for (const tv of travelers) {
+    const sx = w2sX(tv.x, scale), sy = w2sY(tv.y, scale);
+    if (sx < -120 || sx > W + 120 || sy < -120 || sy > H + 120) continue;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(scale * 0.8, scale * 0.8);
+    ctx.rotate(Math.sin(run.time * 1.4 + tv.flap) * 0.06);
+    drawBirdBody(tv.kind, TUNE.owl.radius, {
+      wingT: 0.6,
+      flap: Math.sin(run.time * 9 + tv.flap) * 0.5,
+      eyesClosed: false,
+      squash: 0,
+    });
+    ctx.restore();
+  }
+}
+
+/* =====================================================================
+   Main loop
+   ===================================================================== */
+let lastT = performance.now();
+function frame(now) {
+  const dt = clamp((now - lastT) / 1000, 0, TUNE.phys.maxFrameDt);
+  lastT = now;
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
