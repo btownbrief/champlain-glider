@@ -130,6 +130,28 @@
     box-shadow: 0 6px 20px rgba(20,10,40,.35);
     transform: rotate(-1.2deg);
   }
+  #postcard.newBestPostcard {
+    animation: postcardBestPulse .72s ease-out both;
+  }
+  @keyframes postcardBestPulse {
+    0% { transform: rotate(-1.2deg) scale(1); box-shadow: 0 6px 20px rgba(20,10,40,.35); }
+    38% { transform: rotate(0deg) scale(1.075); border-color: #d3a936; box-shadow: 0 0 34px rgba(255,205,90,.85); }
+    100% { transform: rotate(-1.2deg) scale(1); box-shadow: 0 6px 20px rgba(20,10,40,.35); }
+  }
+  #bestRain {
+    position: absolute; inset: -14px 0 0; z-index: 2;
+    overflow: hidden; pointer-events: none; border-radius: 8px;
+  }
+  #bestRain span {
+    position: absolute; top: -18px; left: var(--left);
+    width: 6px; height: 12px; border-radius: 55% 15% 55% 15%;
+    background: #e7af2f; box-shadow: 0 0 5px rgba(255,205,90,.8);
+    transform: translateX(0) rotate(0deg);
+    animation: bestGoldRain var(--dur) ease-in var(--delay) forwards;
+  }
+  @keyframes bestGoldRain {
+    to { transform: translateX(var(--drift)) translateY(245px) rotate(420deg); opacity: .2; }
+  }
   #pcHead { font-weight: 900; font-size: clamp(15px, 3.2vh, 21px); color: #8a2f2f; margin-bottom: 6px; }
   .pcRow { display: flex; justify-content: space-between; gap: 24px; font-size: clamp(12px, 2.4vh, 15px); font-weight: 600; padding: 1px 0; }
   .pcRow b { font-weight: 800; }
@@ -195,6 +217,39 @@
   }
   #paused.show { display: flex; }
 
+  /* ---------- Rare transition beats (presentation-only) ---------- */
+  #feverEntry {
+    position: absolute; inset: 0; z-index: 4; pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(ellipse at center, rgba(255,204,92,.08) 20%, rgba(218,104,62,.42) 100%);
+  }
+  #feverEntry.show { animation: feverEntryTint .48s ease-out both; }
+  @keyframes feverEntryTint {
+    0% { opacity: 0; }
+    22% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  #deathBeat {
+    position: absolute; inset: 0; z-index: 12; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; overflow: hidden; color: #f3efff;
+    font-size: clamp(20px, 5vh, 38px); font-weight: 900; letter-spacing: .08em;
+    text-shadow: 0 2px 12px rgba(0,0,0,.8);
+  }
+  #deathBeat::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(7,6,28,.98), rgba(18,10,48,.88));
+    transform: scaleX(0); transform-origin: left center;
+  }
+  #deathBeat span { position: relative; z-index: 1; }
+  #deathBeat.show { animation: deathTextBeat .6s ease-out both; }
+  #deathBeat.show::before { animation: deathWipe .6s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes deathWipe { to { transform: scaleX(1); } }
+  @keyframes deathTextBeat {
+    0%, 18% { opacity: 0; }
+    42%, 100% { opacity: 1; }
+  }
+
   @media (max-height: 450px) and (orientation: landscape) {
     .panel { padding: 5px 12px 10px; }
     .panel h1 { font-size: clamp(27px, 8vh, 38px); margin-bottom: 0; }
@@ -214,6 +269,9 @@
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+    #postcard.newBestPostcard { transform: rotate(-1.2deg); border-color: #d3a936; box-shadow: 0 0 24px rgba(255,205,90,.65); }
+    #deathBeat.show { opacity: 1; background: rgba(7,6,28,.94); }
+    #deathBeat.show::before { transform: scaleX(1); }
   }
 
   /* ---------- Rotate hint (portrait touch devices) ---------- */
@@ -243,6 +301,8 @@
     <div id="boostWrap"><div id="boostFill"></div></div>
     <button id="mute" type="button" aria-pressed="false">Sound on</button>
   </div>
+  <div id="feverEntry" aria-hidden="true"></div>
+  <div id="deathBeat" role="status" aria-live="assertive" aria-atomic="true"><span></span></div>
   <div id="menu" class="panel">
     <h1>Champlain Glider</h1>
     <div class="sub">A Burlington sunset run</div>
@@ -272,6 +332,7 @@
     <div class="stats" id="overScore">0 <small>points</small></div>
     <div id="overBoard"></div>
     <div id="postcard">
+      <div id="bestRain" aria-hidden="true"></div>
       <div id="pcStamp">VT</div>
       <div id="pcHead">Greetings from Burlington!</div>
       <div class="pcRow"><span>Distance</span><b id="pcDist">0 m</b></div>
@@ -509,9 +570,13 @@ const TUNE = {
 
   // ----- Ambient effects -----
   fx: {
-    maxParticles: 260,
+    maxParticles: 40,
     snowRate: 26,           // ambient snowflakes per second
     feverTrailRate: 60,     // gold sparkles per second in Fever
+    feverShake: 18,         // Fever entry is stronger than an ordinary slam
+    deathBeat: 0.6,         // night-wall wipe before the postcard appears
+    deathSlow: 0.18,        // visual drift during the catch beat
+    bestRain: 18,           // postcard particles; kept below the live cap
   },
 };
 
@@ -520,6 +585,9 @@ const TUNE = {
    ===================================================================== */
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+let reduceMotion = motionQuery.matches;
+motionQuery.addEventListener?.('change', (e) => { reduceMotion = e.matches; });
 function storageGet(key, fallback = '') {
   try { return localStorage.getItem(key) ?? fallback; } catch (e) { return fallback; }
 }
@@ -560,6 +628,11 @@ const el = {
   paused: document.getElementById('paused'),
   menuStart: document.getElementById('menuStart'),
   restartButton: document.getElementById('restartButton'),
+  postcard: document.getElementById('postcard'),
+  bestRain: document.getElementById('bestRain'),
+  feverEntry: document.getElementById('feverEntry'),
+  deathBeat: document.getElementById('deathBeat'),
+  deathBeatText: document.querySelector('#deathBeat span'),
 };
 
 // ----- Leaderboard UI -----
@@ -766,6 +839,12 @@ function sfxCoin() {
 }
 function sfxPerfect() { tone(620, 860, 0.2, 'sine', 0.07); }
 function sfxFever() { tone(523, 523, 0.12, 'sine', 0.06); tone(659, 659, 0.12, 'sine', 0.06, 0.1); tone(784, 784, 0.2, 'sine', 0.07, 0.2); }
+function sfxFanfare() {
+  tone(523, 523, 0.16, 'triangle', 0.055);
+  tone(659, 659, 0.16, 'triangle', 0.055, 0.11);
+  tone(784, 784, 0.22, 'triangle', 0.065, 0.22);
+  tone(1047, 1047, 0.38, 'sine', 0.06, 0.34);
+}
 function sfxBoost() {
   if (!AC) return;
   // Whoosh: filtered noise sweep under a rising tone
@@ -1239,12 +1318,12 @@ const terrain = {
 /* =====================================================================
    Game state
    ===================================================================== */
-const STATE = { MENU: 0, PLAY: 1, OVER: 2, INTRO: 3, PAUSED: 4 };
+const STATE = { MENU: 0, PLAY: 1, OVER: 2, INTRO: 3, PAUSED: 4, CAUGHT: 5 };
 let state = STATE.MENU;
 let resumeState = null;
 let holding = false;
 let introSeen = false, introT = 0;
-let overAt = 0;               // timestamp of game over (restart lockout)
+let deathT = 0;
 let lastHudScore = -1, lastHudBest = -1, lastCombo = -1, lastFever = null, lastWarn = null, lastBoostPct = -1, lastMult = -1;
 
 let best = 0;
@@ -1374,12 +1453,15 @@ const run = {
   ghostFinal: null, beatGhost: false, fwT: 0, fwNext: 0,
   islandNow: 1,
 };
-// Crest coach: once the player is already holding on an uphill, a simple bar
-// fills toward the release point. No numeric countdown or instruction to
-// begin holding—the only transition is KEEP HOLDING -> LET GO.
+// The versioned first-run cue teaches the complete first-hill rhythm. After
+// that, the quieter crest coach only appears when a player is already holding.
+const COACH_STORAGE_KEY = 'champlain_glider_coach_v2';
 const COACH_RELEASE_LEAD = 0.40;
 const COACH_PREVIEW = 1.50;
-const coach = { cue: '', checkT: 0, releaseUntil: 0, relAimAt: 0, holdProgress: 0 };
+const coach = {
+  cue: '', checkT: 0, releaseUntil: 0, relAimAt: 0, holdProgress: 0,
+  firstRun: storageGet(COACH_STORAGE_KEY) !== '1', firstStage: 'downhill', doneUntil: 0,
+};
 
 function gradeRelease() {
   if (state !== STATE.PLAY) return;
@@ -1397,8 +1479,21 @@ let popups = [];
 let snowAcc = 0, trailAcc = 0, fireflyAcc = 0, sprayAcc = 0, lastPopT = -10;
 let shakeT = 0, shakeMag = 0, freezeT = 0;   // slam screenshake + hitstop
 let shOffX = 0, shOffY = 0;                  // per-frame shake offset applied in w2s
+let effectEpoch = 0, feverFlashTimer = 0, bestRainTimer = 0;
+
+function clearTransientEffects() {
+  effectEpoch++;
+  clearTimeout(feverFlashTimer);
+  clearTimeout(bestRainTimer);
+  el.feverEntry.classList.remove('show');
+  el.deathBeat.classList.remove('show');
+  el.deathBeatText.textContent = '';
+  el.postcard.classList.remove('newBestPostcard');
+  el.bestRain.replaceChildren();
+}
 
 function reset() {
+  clearTransientEffects();
   terrain.reset();
   terrain.ensure(4000);
   run.startX = -1100;
@@ -1430,6 +1525,8 @@ function reset() {
   run.townIdx = 0; run.zoneType = 'rolling'; run.path = []; run.nextSample = 0;
   run.islandNow = 1;
   coach.cue = ''; coach.checkT = 0; coach.releaseUntil = 0; coach.relAimAt = 0; coach.holdProgress = 0;
+  coach.firstStage = 'downhill'; coach.doneUntil = 0;
+  deathT = 0;
   run.ghostFinal = (ghost && ghost.d && ghost.d.length) ? ghost.d[ghost.d.length - 1] : null;
   run.beatGhost = false; run.fwT = 0; run.fwNext = 0;
   if (birdKind === 'thrush' && !thrushUnlocked()) birdKind = 'cardinal';
@@ -1439,7 +1536,7 @@ function reset() {
   camX = owl.x; camY = owl.y * 0.75; zoom = 1; altSmoothed = 0; groundSm = owl.y; lastPopT = -10;
   spdSmoothed = TUNE.phys.startSpeed; gyCam = owl.y;
   particles = []; popups = [];
-  snowAcc = 0; trailAcc = 0; sprayAcc = 0;
+  snowAcc = 0; trailAcc = 0; fireflyAcc = 0; sprayAcc = 0;
   shakeT = 0; shakeMag = 0; freezeT = 0; shOffX = 0; shOffY = 0;
   el.collectMenu.textContent = collectText();
 }
@@ -1495,16 +1592,22 @@ function press() {
     el.paused.classList.remove('show');
     holding = state === STATE.PLAY;
   } else if (state === STATE.OVER) {
-    if (performance.now() - overAt > 700) {
-      reset();
-      state = STATE.PLAY;
-      el.over.classList.add('hidden');
-      holding = true;
-    }
+    reset();
+    state = STATE.PLAY;
+    el.over.classList.add('hidden');
+    holding = true;
   }
 }
 function release() {
-  if (holding && state === STATE.PLAY) gradeRelease();
+  if (holding && state === STATE.PLAY) {
+    if (coach.firstRun && coach.cue === 'firstRelease') {
+      coach.firstRun = false;
+      coach.cue = 'firstDone';
+      coach.doneUntil = run.time + 1.15;
+      storageSet(COACH_STORAGE_KEY, '1');
+    }
+    gradeRelease();
+  }
   holding = false;
 }
 
@@ -1579,11 +1682,67 @@ document.addEventListener('visibilitychange', () => {
    Effects
    ===================================================================== */
 function addPopup(text, wx, wy, color, size) {
-  popups.push({ text, x: wx, y: wy, age: 0, life: 1.1, color: color || '#ffffff', size: size || 26 });
+  const popupSize = size || 26;
+  const scaleNow = (H / viewVH) * zoom;
+  const baseScreenY = w2sY(wy, scaleNow);
+  let targetScreenY = baseScreenY;
+  for (const p of popups) {
+    if (p.age < 0.3) {
+      const gap = (p.size + popupSize) * scaleNow * 0.58 + 10;
+      const existingScreenY = w2sY(p.y, scaleNow) - p.screenOffset;
+      targetScreenY = Math.min(targetScreenY, existingScreenY - gap);
+    }
+  }
+  const screenOffset = baseScreenY - targetScreenY;
+  popups.push({
+    text, x: wx, y: wy, screenOffset,
+    age: 0, life: 1.1, color: color || '#ffffff', size: popupSize,
+  });
 }
 function addParticle(p) {
-  if (particles.length >= TUNE.fx.maxParticles) particles.shift();
+  if (reduceMotion) return;
+  const particleCap = Math.max(0, TUNE.fx.maxParticles - el.bestRain.childElementCount);
+  if (particleCap === 0) return;
+  while (particles.length >= particleCap) particles.shift();
   particles.push(p);
+}
+function triggerFeverEntry() {
+  clearTimeout(feverFlashTimer);
+  if (!reduceMotion) {
+    el.feverEntry.classList.remove('show');
+    void el.feverEntry.offsetWidth;
+    el.feverEntry.classList.add('show');
+    shakeT = Math.max(shakeT, 0.28);
+    shakeMag = Math.max(shakeMag, TUNE.fx.feverShake);
+  }
+  const epoch = effectEpoch;
+  feverFlashTimer = setTimeout(() => {
+    if (epoch === effectEpoch) el.feverEntry.classList.remove('show');
+  }, 520);
+}
+function startBestFanfare() {
+  clearTimeout(bestRainTimer);
+  el.postcard.classList.add('newBestPostcard');
+  el.bestRain.replaceChildren();
+  if (!reduceMotion) {
+    const rain = document.createDocumentFragment();
+    for (let i = 0; i < TUNE.fx.bestRain; i++) {
+      const leaf = document.createElement('span');
+      leaf.style.setProperty('--left', (3 + Math.random() * 94) + '%');
+      leaf.style.setProperty('--delay', (Math.random() * 0.34) + 's');
+      leaf.style.setProperty('--dur', (0.82 + Math.random() * 0.5) + 's');
+      leaf.style.setProperty('--drift', ((Math.random() - 0.5) * 46) + 'px');
+      rain.appendChild(leaf);
+    }
+    el.bestRain.appendChild(rain);
+  }
+  sfxFanfare();
+  const epoch = effectEpoch;
+  bestRainTimer = setTimeout(() => {
+    if (epoch !== effectEpoch) return;
+    el.postcard.classList.remove('newBestPostcard');
+    el.bestRain.replaceChildren();
+  }, 1650);
 }
 function landingPuff(x, y, n, strong) {
   for (let i = 0; i < n; i++) {
@@ -1616,6 +1775,7 @@ function handleLanding(slope, tx, ty, preVx, preVy) {
     if (!run.fever && run.combo >= P.feverAt) {
       run.fever = true;
       addPopup('FEVER!', owl.x, owl.y - 130, '#ffd76a', 40);
+      triggerFeverEntry();
       sfxFever();
     } else {
       sfxPerfect();
@@ -1833,7 +1993,7 @@ function physStep(dt) {
 }
 
 function update(dt) {
-  if (state !== STATE.PAUSED) run.time += dt;
+  if (state !== STATE.PAUSED) run.time += dt * (state === STATE.CAUGHT ? TUNE.fx.deathSlow : 1);
 
   if (state === STATE.PLAY) {
     if (freezeT > 0) {
@@ -1845,46 +2005,57 @@ function update(dt) {
     }
     owl.stun = Math.max(0, owl.stun - dt);
 
-    // Stay quiet until the bird is already climbing. During the final stretch
-    // the bar fills toward the release point, then becomes the LET GO cue.
+    // The first visit coaches one complete hill. Later runs stay quiet until
+    // the bird is already climbing, then show the compact crest timing cue.
     coach.checkT -= dt;
     if (coach.checkT <= 0) {
       coach.checkT = 0.06;
       const currentSlope = terrain.slopeAt(owl.x);
-      const eligible = holding && owl.grounded && owl.stun <= 0 && !terrain.isWater(owl.x) && !terrain.isRamp(owl.x);
-      if (eligible) {
-        const spd = Math.max(300, Math.hypot(owl.vx, owl.vy));
-        let sawUphill = currentSlope < -0.06;
-        let crestDx = -1;
-        for (let dx = 30; dx <= spd * (COACH_PREVIEW + 0.15); dx += 30) {
-          const slope = terrain.slopeAt(owl.x + dx);
-          if (!sawUphill && slope < -0.08) { sawUphill = true; continue; }
-          if (sawUphill && slope >= -0.015) { crestDx = dx; break; }
+      if (coach.firstRun) {
+        if (coach.firstStage === 'downhill' && holding && currentSlope > 0.03) {
+          coach.firstStage = 'uphill';
         }
-        const timeToCrest = crestDx >= 0 ? crestDx / spd : Infinity;
-        if (currentSlope < -0.06 && timeToCrest <= COACH_RELEASE_LEAD) {
-          if (coach.cue !== 'release') {
-            coach.relAimAt = run.time;
-            coach.releaseUntil = run.time + 0.45;
+        coach.cue = coach.firstStage === 'uphill' && currentSlope < -0.035
+          ? 'firstRelease' : 'firstHold';
+        coach.holdProgress = holding ? 1 : 0.16;
+      } else if (run.time < coach.doneUntil) {
+        coach.cue = 'firstDone';
+      } else {
+        const eligible = holding && owl.grounded && owl.stun <= 0 && !terrain.isWater(owl.x) && !terrain.isRamp(owl.x);
+        if (eligible) {
+          const spd = Math.max(300, Math.hypot(owl.vx, owl.vy));
+          let sawUphill = currentSlope < -0.06;
+          let crestDx = -1;
+          for (let dx = 30; dx <= spd * (COACH_PREVIEW + 0.15); dx += 30) {
+            const slope = terrain.slopeAt(owl.x + dx);
+            if (!sawUphill && slope < -0.08) { sawUphill = true; continue; }
+            if (sawUphill && slope >= -0.015) { crestDx = dx; break; }
           }
-          coach.cue = 'release';
-          coach.holdProgress = 1;
-        } else if (timeToCrest <= COACH_PREVIEW) {
-          coach.cue = 'holding';
-          coach.relAimAt = 0;
-          coach.releaseUntil = 0;
-          coach.holdProgress = clamp(
-            (COACH_PREVIEW - timeToCrest) / (COACH_PREVIEW - COACH_RELEASE_LEAD), 0, 1
-          );
+          const timeToCrest = crestDx >= 0 ? crestDx / spd : Infinity;
+          if (currentSlope < -0.06 && timeToCrest <= COACH_RELEASE_LEAD) {
+            if (coach.cue !== 'release') {
+              coach.relAimAt = run.time;
+              coach.releaseUntil = run.time + 0.45;
+            }
+            coach.cue = 'release';
+            coach.holdProgress = 1;
+          } else if (timeToCrest <= COACH_PREVIEW) {
+            coach.cue = 'holding';
+            coach.relAimAt = 0;
+            coach.releaseUntil = 0;
+            coach.holdProgress = clamp(
+              (COACH_PREVIEW - timeToCrest) / (COACH_PREVIEW - COACH_RELEASE_LEAD), 0, 1
+            );
+          } else if (run.time > coach.releaseUntil) {
+            coach.cue = '';
+            coach.relAimAt = 0;
+            coach.holdProgress = 0;
+          }
         } else if (run.time > coach.releaseUntil) {
           coach.cue = '';
           coach.relAimAt = 0;
           coach.holdProgress = 0;
         }
-      } else if (run.time > coach.releaseUntil) {
-        coach.cue = '';
-        coach.relAimAt = 0;
-        coach.holdProgress = 0;
       }
     }
 
@@ -1938,7 +2109,10 @@ function update(dt) {
     const darkTarget = clamp(1 - gap / TUNE.dusk.warnGap, 0, 0.82);
     run.darkness += (darkTarget - run.darkness) * Math.min(1, 1.6 * dt);
 
-    if (gap <= 0) gameOver();
+    if (gap <= 0) {
+      beginDeath();
+      return;
+    }
 
     // Announce Vermont zones as you cross into them
     for (const m of terrain.zoneMarks) {
@@ -2199,6 +2373,23 @@ function update(dt) {
       }
       sfxFever();
     }
+  } else if (state === STATE.CAUGHT) {
+    // The result is already fixed. Let the caught frame drift at a fraction
+    // of speed while the presentation-only night wipe crosses the screen.
+    deathT += dt;
+    const slowDt = dt * TUNE.fx.deathSlow;
+    owl.x += owl.vx * slowDt;
+    if (owl.grounded) {
+      owl.y = terrain.heightAt(owl.x);
+    } else {
+      owl.vy += TUNE.phys.gravity * slowDt;
+      owl.y += owl.vy * slowDt;
+      const gy = terrain.heightAt(owl.x);
+      if (owl.y >= gy) { owl.y = gy; owl.vy = 0; owl.grounded = true; }
+    }
+    owl.vx *= Math.pow(0.28, slowDt);
+    run.darkness = clamp(run.darkness + dt / TUNE.fx.deathBeat * 0.65, 0, 0.98);
+    if (deathT >= TUNE.fx.deathBeat) gameOver();
   } else if (state === STATE.OVER) {
     // The owl settles and falls asleep while the night swallows the sky
     const gy = terrain.heightAt(owl.x);
@@ -2251,7 +2442,7 @@ function update(dt) {
 
   // Owl pose
   let targetAngle;
-  if (owl.grounded || state !== STATE.PLAY) {
+  if (owl.grounded || (state !== STATE.PLAY && state !== STATE.CAUGHT)) {
     targetAngle = Math.atan2(terrain.slopeAt(owl.x), 1);
   } else {
     targetAngle = clamp(Math.atan2(owl.vy, Math.max(owl.vx, 60)), -1.15, 1.25);
@@ -2372,11 +2563,25 @@ function update(dt) {
   updateHud();
 }
 
-function gameOver() {
-  state = STATE.OVER;
-  overAt = performance.now();
+function beginDeath() {
+  if (state !== STATE.PLAY) return;
+  state = STATE.CAUGHT;
+  deathT = 0;
   holding = false;
+  coach.cue = '';
+  coach.relAimAt = 0;
+  clearTimeout(feverFlashTimer);
+  el.feverEntry.classList.remove('show');
+  el.deathBeatText.textContent = 'The night caught you';
+  el.deathBeat.classList.add('show');
   sfxNight();
+}
+
+function gameOver() {
+  if (state !== STATE.CAUGHT) return;
+  state = STATE.OVER;
+  el.deathBeat.classList.remove('show');
+  el.deathBeatText.textContent = '';
   // Did you outfly your ghost? (check before the ghost gets overwritten)
   run.beatGhost = run.ghostFinal != null && (owl.x - run.startX) > run.ghostFinal;
   if (run.beatGhost) addPopup('You beat your best pace!', owl.x + 300, owl.y - 320, '#ffd76a', 30);
@@ -2412,6 +2617,11 @@ function gameOver() {
   el.goalOver.textContent = goalText();
   el.collectMenu.textContent = collectText();
   el.over.classList.remove('hidden');
+  if (run.newBest) {
+    particles = [];
+    startBestFanfare();
+  }
+  el.restartButton.focus({ preventScroll: true });
   lbAfterRun(run.boardScore);
 }
 
@@ -2452,7 +2662,7 @@ function render() {
   const d = run.darkness;
 
   // Slam screenshake: a quick decaying jitter applied to all world drawing
-  if (shakeT > 0) {
+  if (shakeT > 0 && !reduceMotion) {
     const k = (shakeT / 0.28) * shakeMag;
     shOffX = (Math.random() - 0.5) * 2 * k;
     shOffY = (Math.random() - 0.5) * 2 * k;
@@ -2896,7 +3106,7 @@ function render() {
     ctx.fillStyle = p.color;
     ctx.font = '800 ' + Math.round(p.size * scale + t * 6) + 'px -apple-system, "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(p.text, w2sX(p.x, scale), w2sY(p.y, scale) - t * 50);
+    ctx.fillText(p.text, w2sX(p.x, scale), w2sY(p.y, scale) - p.screenOffset - t * 50);
   }
   ctx.globalAlpha = 1;
 
@@ -2985,7 +3195,8 @@ function drawNightDial() {
 
 // One continuous crest cue: a non-numeric hold bar that becomes LET GO.
 function drawCoach(scale) {
-  if ((coach.cue !== 'holding' && coach.cue !== 'release') || state !== STATE.PLAY) return;
+  const cues = ['firstHold', 'firstRelease', 'firstDone', 'holding', 'release'];
+  if (!cues.includes(coach.cue) || state !== STATE.PLAY) return;
   const sx = w2sX(owl.x, scale);
   const sy = w2sY(owl.y, scale) - 105 * scale - 34;
   const gold = '#ffd76a', ice = '#aef0ff';
@@ -2997,7 +3208,24 @@ function drawCoach(scale) {
     ctx.fillStyle = col;
     ctx.fillText(txt, sx, sy + dy);
   };
-  if (coach.cue === 'holding') {
+  if (coach.cue === 'firstHold') {
+    ctx.globalAlpha = 0.97;
+    label('HOLD ON THE DOWNHILL', gold, 17, 0);
+    label('Fold your wings to build speed', '#ffffff', 13, 23);
+  } else if (coach.cue === 'firstRelease') {
+    ctx.globalAlpha = 0.97;
+    ctx.strokeStyle = ice;
+    ctx.beginPath(); ctx.arc(sx, sy - 4, 10, 0, 6.2832); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - 34); ctx.lineTo(sx, sy - 19);
+    ctx.moveTo(sx - 6, sy - 28); ctx.lineTo(sx, sy - 35); ctx.lineTo(sx + 6, sy - 28);
+    ctx.stroke();
+    label('RELEASE ON THE UPHILL', ice, 19, 38);
+    label('Open your wings to soar', '#ffffff', 13, 59);
+  } else if (coach.cue === 'firstDone') {
+    ctx.globalAlpha = 0.97;
+    label('NICE — THAT’S THE RHYTHM!', gold, 18, 4);
+  } else if (coach.cue === 'holding') {
     const bw = 126, bh = 10, bx = sx - bw / 2, by = sy + 10;
     ctx.globalAlpha = 0.95;
     label('KEEP HOLDING', gold, 17, -5);
