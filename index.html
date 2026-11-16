@@ -119,6 +119,8 @@
     font-size: 15px; font-weight: 800; color: #ffd9a0; margin-bottom: 12px; max-width: 100%; white-space: nowrap;
   }
   .panel .daily small { display: block; font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; opacity: .75; margin-bottom: 2px; color: #fff; }
+  .panel .daily .stamp { display: block; margin-top: 4px; font-size: 12.5px; font-weight: 700; color: #fff; opacity: .8; }
+  .panel .daily .stamp.done { color: #a8f0bd; opacity: 1; font-weight: 800; }
   #streak {
     display: inline-block; margin-bottom: 10px; padding: 3px 12px 3px 10px; border-radius: 99px;
     background: rgba(46,125,79,.55); border: 1.5px solid #8fd9a8; font-size: 13px; font-weight: 800; color: #e6ffe9;
@@ -208,9 +210,10 @@
     background: rgba(255,200,80,.18); color: #ffd76a; font-weight: 800; font-size: 13px; cursor: pointer;
   }
   #lbRename { margin-top: 6px; opacity: .8; }
-  #overBoard { font-size: clamp(11px, 2.2vh, 14px); opacity: .8; margin: -2px 0 5px; }
+  #overBoard { font-size: clamp(11px, 2.2vh, 13px); opacity: .75; margin: 2px 0 6px; }
   .playButton {
-    pointer-events: auto; margin-top: 8px; padding: 13px 34px; border-radius: 99px;
+    /* touch-action none: a thumb that drifts off "Hold to fly again" keeps its hold (the panel would otherwise scroll and cancel it) */
+    pointer-events: auto; touch-action: none; margin-top: 8px; padding: 13px 34px; border-radius: 99px;
     border: 2px solid #ffd76a; background: rgba(255,190,70,.22); color: #fff;
     font: inherit; font-size: clamp(17px, 3.2vh, 21px); font-weight: 900; cursor: pointer; letter-spacing: .5px;
     box-shadow: 0 0 18px rgba(255,190,70,.35);
@@ -222,6 +225,11 @@
   #over #restartButton { margin: 4px 0 14px; }
   .brief { margin-top: 12px; font-size: clamp(11px, 2.2vh, 13px); opacity: .85; pointer-events: auto; }
   .brief a { color: #ffd9a0; font-weight: 800; }
+  /* On the title the credit links sit on the bottom edge, well away from the start button */
+  #menuBrief {
+    position: absolute; left: 50%; transform: translateX(-50%); margin: 0; white-space: nowrap;
+    bottom: calc(env(safe-area-inset-bottom) + 40px); font-size: 12px; opacity: .75; /* clear of the 30px news ticker */
+  }
   @keyframes promptPulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
 
   #mute {
@@ -337,7 +345,7 @@
     <div class="daily" id="dailyMenu"></div>
     <div id="streak" class="hidden"></div>
     <button id="menuStart" class="playButton" type="button">Hold to fly</button>
-    <div class="brief">A Btown Games production &middot; <a href="https://play.btownbrief.com/">More games →</a><br><a href="https://www.btownbrief.com" target="_blank" rel="noopener">Read the Btown Brief</a></div>
+    <div class="brief" id="menuBrief"><a href="https://play.btownbrief.com/">More games →</a> &middot; <a href="https://www.btownbrief.com" target="_blank" rel="noopener">Read the Btown Brief</a></div>
   </div>
   <div id="over" class="panel hidden">
     <h2>The night caught you</h2>
@@ -356,8 +364,8 @@
     </div>
     <button id="restartButton" class="playButton" type="button">Hold to fly again</button>
     <div class="goal" id="goalOver"></div>
-    <div id="overBoard"></div>
     <div id="lb">
+      <div id="overBoard"></div>
       <div id="lbTabs" role="tablist" aria-label="Leaderboard month">
         <button type="button" class="lbTab sel" data-off="0" role="tab" aria-selected="true">This month</button>
         <button type="button" class="lbTab" data-off="-1" role="tab" aria-selected="false">Last month</button>
@@ -444,7 +452,8 @@ const TUNE = {
                  col: [[248, 244, 240], [214, 200, 206]] },
       gorge:   { w: 0.13, short: 'Gorge', name: 'Quechee Gorge',       ampMul: 1.15, spaceMul: 1.0,  drift: 0,
                  col: [[186, 178, 168], [126, 118, 114]] },
-      lake:    { w: 0.10, short: 'Ice', name: 'Champlain on Ice',    ampMul: 0.10, spaceMul: 1.5,  drift: 0, ice: true, len: [38, 50],
+      // Ice is a short speed sprint (about 12 s) wherever it falls in the tour, broken by snowdrift kickers
+      lake:    { w: 0.10, short: 'Ice', name: 'Champlain on Ice',    ampMul: 0.10, spaceMul: 1.5,  drift: 0, ice: true, len: [8, 11], lenAlways: true,
                  col: [[234, 243, 248], [188, 208, 222]] },
       // Not an island: the open water between islands (w: 0 = never picked)
       water:   { w: 0,    name: '',                    ampMul: 0,    spaceMul: 1,    drift: 0,
@@ -471,6 +480,8 @@ const TUNE = {
     gorgeDepth: 560,        // how far the river sits below the near rim
     gorgeBonus: 300,        // points for clearing one without touching the river
     trailCoinMul: 2,        // The Long Trail Down: twice the coin trails (the payoff island)
+    iceKickEvery: [1, 2],   // Champlain on Ice: a snowdrift kicker every N keys (a rolling run of drifts)...
+    iceDriftH: 440,         // ...rising this far above the ice, with a long back slope to land on
   },
 
   // ----- Water: let go over it and you skip like a stone -----
@@ -524,8 +535,7 @@ const TUNE = {
     wait: [7, 16],          // seconds between new rivals showing up
     stamina: [55, 130],     // how long each rival hangs with you (seconds)
     band: 1000,             // rubber band: rivals stay within about this many px of you
-    passBonus: 800,         // points every time you overtake one
-    passCooldown: 7,        // seconds between pass bonuses per rival
+    passBonus: 800,         // points the first time you overtake each one (one rival per island)
   },
   boost: {
     tapWindow: 280,         // ms between taps to count as a double tap
@@ -585,6 +595,12 @@ const TUNE = {
     slamStun: 0.35,         // seconds of no dive control after a slam
     launchVy: 540,          // leave a crest rising faster than this and it's a clean launch
     launchBonus: 50,        // points for a clean launch (times multipliers)
+    // The skill is the release: a slide only counts as Perfect when the dive
+    // began in the air on that flight (holding since before takeoff never scores)
+    uphillGrace: 0.3,       // holding up a hill for longer than this...
+    uphillBleed: 3.0,       // ...bleeds speed at this rate (per second) until you let go
+    slamFloor: 1000,        // after a slam on land the ground speed never drops under this...
+    slamFloorT: 1.6,        // ...for this long: a slam costs your chain and some lead, never a crawl
   },
 
   // ----- Score -----
@@ -596,14 +612,16 @@ const TUNE = {
   // ----- Dusk chase (simplified night mechanic) -----
   dusk: {
     startGap: 2000,         // starting gap between owl and the night (px)
-    baseSpeed: 900,         // the night's speed on island 1 (px/s)...
-    islandStep: 190,        // ...plus this much per island. Set by the island, never by your speed.
+    baseSpeed: 980,         // the night's speed on island 1 (px/s)...
+    islandStep: 205,        // ...plus this much per island. Set by the island, never by your speed.
     lateFrom: 6,            // from this island on it also quickens on a curve...
-    lateRamp: 15,           // ...+ this * (islands past lateFrom)^2, so even a perfect run ends (about 4-6 min)
+    lateRamp: 22,           // ...+ this * (islands past lateFrom)^2, so even a perfect run ends (about 3.5-5 min)
     ease: 0.3,              // it eases into a new island's pace over ~10 s (deaths don't pile up at the shore)
-    damping: 0.7,           // the night slows to this fraction as it closes in, so the
-    dampGap: 1000,          //   almost-caught sweat lasts; full speed beyond this gap
-    maxGap: 2600,           // a good stretch banks a lead you can spend on a mistake
+    damping: 0.62,          // the night slows to this fraction as it closes in, so the
+    dampGap: 1400,          //   almost-caught sweat lasts (you can claw back); full speed beyond this gap
+    maxGap: 4200,           // a good stretch banks a lead you can spend on a mistake...
+    leashFrom: 1400,        // ...but past this gap it drifts back (the night closes faster the bigger your lead),
+    leash: 0.3,             //   this much extra night speed per px of lead (px/s per px): the night stays in view
     pushback: 300,          // px the night is pushed back per perfect slide
     feverPushback: 450,     // pushback during Fever
     vignetteGap: 1500,      // a dark edge grows in from the left inside this gap
@@ -769,39 +787,59 @@ function dayStr(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).pad
 const DAY_KEY = 'champlain_glider_day';
 let dayRec = null;
 try { dayRec = JSON.parse(localStorage.getItem(DAY_KEY) || 'null'); } catch (e) { dayRec = null; }
+// The daily target: reach this island on today's tour to stamp the day.
+// The streak counts stamped days in a row (no penalty for missing one; it just starts over).
+const STAMP_ISLAND = 5;
 (function rollDay() {
   const t = dayStr(today);
   const y = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
   if (!dayRec || typeof dayRec !== 'object') dayRec = {};
   if (dayRec.day !== t) {
-    const streak = dayRec.day === dayStr(y) ? (dayRec.streak || 1) + 1 : 1;
-    dayRec = { day: t, runs: 0, best: 0, streak, lastDay: dayRec.day || '' };
+    // carried = stamped days in a row up to yesterday
+    const carried = dayRec.day === dayStr(y) && dayRec.stamped ? (dayRec.streak || 1) : 0;
+    dayRec = { day: t, runs: 0, best: 0, streak: carried, lastDay: dayRec.day || '', stamped: false };
     try { localStorage.setItem(DAY_KEY, JSON.stringify(dayRec)); } catch (e) {}
   }
 })();
 function saveDay() { try { localStorage.setItem(DAY_KEY, JSON.stringify(dayRec)); } catch (e) {} }
-function makeTour(n) {
+// Weighted biome pick that skips anything in `avoid`
+function pickBiome(rand, avoid) {
+  const types = TUNE.zones.types;
+  let total = 0;
+  for (const k in types) if (types[k].w > 0 && !avoid.includes(k)) total += types[k].w;
+  let x = rand() * total, pick = null;
+  for (const k in types) {
+    if (types[k].w <= 0 || avoid.includes(k)) continue;
+    x -= types[k].w;
+    if (x <= 0) { pick = k; break; }
+  }
+  if (!pick) for (const k in types) if (types[k].w > 0 && !avoid.includes(k)) pick = k;
+  return pick;
+}
+// Today's islands: the day picks four different biomes (island 1 is always the
+// gentle teacher, and one of the four is always a twist: Stowe or the Gorge).
+function makeDaySet() {
   // Hash the date first: consecutive days must not share an opening
   const rand = mulberry32(Math.imul(daySeed ^ 0x5bd1e995, 0x27d4eb2d) ^ (daySeed >>> 7));
   rand(); rand();
-  const types = TUNE.zones.types;
-  const tour = ['rolling'];   // island 1 is always the gentle teacher
-  while (tour.length < n) {
-    const avoid = tour.length < 4 ? tour : [tour[tour.length - 1]];
-    let total = 0;
-    for (const k in types) if (types[k].w > 0 && !avoid.includes(k)) total += types[k].w;
-    let x = rand() * total, pick = null;
-    for (const k in types) {
-      if (types[k].w <= 0 || avoid.includes(k)) continue;
-      x -= types[k].w;
-      if (x <= 0) { pick = k; break; }
-    }
-    if (!pick) for (const k in types) if (types[k].w > 0 && !avoid.includes(k)) pick = k;
-    tour.push(pick);
-  }
+  const set = ['rolling'];
+  while (set.length < 4) set.push(pickBiome(rand, set));
+  if (!set.includes('stowe') && !set.includes('gorge')) set[1 + Math.floor(rand() * 3)] = rand() < 0.5 ? 'stowe' : 'gorge';
+  return set;
+}
+const DAY_SET = makeDaySet();
+// Each run flies today's four islands with 2-4 in a fresh order, then a fresh
+// draw from island 5 on (never the same biome twice in a row).
+function makeRunTour(runNo, n) {
+  const rand = mulberry32(Math.imul((daySeed * 1000 + runNo) ^ 0x2c1b3c6d, 0x297a2d39) ^ 0x68e31da4);
+  rand(); rand();
+  const mid = DAY_SET.slice(1);
+  for (let i = mid.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [mid[i], mid[j]] = [mid[j], mid[i]]; }
+  const tour = [DAY_SET[0]].concat(mid);
+  while (tour.length < n) tour.push(pickBiome(rand, tour.slice(-2)));
   return tour;
 }
-const TOUR = makeTour(80);
+let TOUR = makeRunTour(dayRec.runs || 0, 80);
 
 /* =====================================================================
    Monthly leaderboard: the shared Btown Games Supabase
@@ -953,6 +991,8 @@ function sfxBoost() {
   tone(660, 1320, 0.3, 'sine', 0.06, 0.05);
 }
 function sfxNight() { tone(300, 90, 1.2, 'sine', 0.1); }
+function sfxCloud() { tone(520, 690, 0.16, 'sine', 0.03); }
+function sfxHoop() { tone(988, 1319, 0.14, 'triangle', 0.05); tone(1568, 1568, 0.18, 'sine', 0.035, 0.07); }
 function sfxSkip(n) { const f = 700 * Math.pow(1.122, Math.min(n - 1, 8)); tone(f, f * 1.6, 0.12, 'sine', 0.07); tone(f * 2, f * 2.4, 0.06, 'triangle', 0.025, 0.02); }
 function sfxTick() { tone(1500, 1400, 0.05, 'square', 0.02); tone(1100, 1000, 0.05, 'square', 0.018, 0.09); }
 function sfxGoal() { tone(784, 784, 0.12, 'triangle', 0.06); tone(988, 988, 0.12, 'triangle', 0.06, 0.09); tone(1319, 1319, 0.3, 'sine', 0.065, 0.18); }
@@ -1130,17 +1170,22 @@ const terrain = {
     const Z = TUNE.zones;
     const pick = TOUR[(n - 1) % TOUR.length];
     const len = n === 1 ? [Z.firstKeys, Z.firstKeys]
+      : Z.types[pick].lenAlways ? Z.types[pick].len
       : n <= Z.earlyIslands ? Z.earlyKeys
       : (Z.types[pick].len || [Z.minKeys, Z.maxKeys]);
     const T = TUNE.twists;
     this.gapsLeft = pick === 'gorge' ? T.gorgeGaps[0] + Math.floor(this.rand() * (T.gorgeGaps[1] - T.gorgeGaps[0] + 1)) : 0;
     this.sinceGap = 0;
     this.thermalIn = 3;
+    this.iceKickIn = 2;
+    this.iceLip = false;
     return { type: pick, left: len[0] + Math.floor(this.rand() * (len[1] - len[0] + 1)) };
   },
 
   reset() {
-    // Biome order comes from the day; hill shapes, coins and scenery are fresh every run
+    // Today's islands come from the day; their order (2-4), the islands after
+    // them, hill shapes, coins and scenery are fresh every run
+    TOUR = makeRunTour(dayRec.runs || 0, 80);
     this.rand = mulberry32(daySeed * 1000 + (dayRec.runs || 0));
     this.keys = [{ x: -1400, y: -150 }];
     this.nextIndex = 1;
@@ -1285,6 +1330,31 @@ const terrain = {
       y = Math.max(y, last.y - sp * TUNE.hill.maxGrade);
       this.upNext = false; // just made a peak; a valley comes next
       this.phase = 'hills';
+    } else if (this.zone.type === 'lake') {
+      // Champlain on Ice: flat, frictionless and fast, broken by snowdrift
+      // kickers. Let go at the lip, then dive onto the drift's long back slope.
+      isHill = true;
+      const T = TUNE.twists;
+      if (this.iceLip) {
+        // the drift's back side: a long smooth slope down onto the ice
+        this.iceLip = false;
+        y = this.baseline + T.iceDriftH * 0.25;
+        sp = spacing * 1.5;
+      } else if (--this.iceKickIn <= 0 && this.zone.left >= 3) {
+        this.iceKickIn = T.iceKickEvery[0] + Math.floor(this.rand() * (T.iceKickEvery[1] - T.iceKickEvery[0] + 1));
+        y = this.baseline - T.iceDriftH * (0.85 + 0.3 * this.rand());
+        sp = spacing * 0.9;
+        lin = true;
+        this.iceLip = true;
+        this.addRampCoins(last.x, last.y, last.x + sp, y);
+        // a hoop on the flight line off the lip
+        this.rings.push({ x: last.x + sp + spacing * 0.75, y: y - 210, r: 100, hit: false, spin: this.rand() * 6.28 });
+      } else {
+        y = this.baseline + (this.rand() - 0.5) * 16;
+      }
+      this.upNext = !this.upNext;
+      this.sinceGap++;
+      if (--this.zone.left <= 0) this.phase = 'rampBase';
     } else {
       // Regular island hills: tall peaks, deep pits, plenty of pop
       isHill = true;
@@ -1519,11 +1589,24 @@ document.querySelectorAll('.birdChip').forEach(ch => {
     refreshBirdChips();
   });
 });
-// The title shows today's tour, and a quiet streak badge from day 2 on
-el.dailyMenu.innerHTML = '<small>Today’s tour</small>' + TOUR.slice(0, 4).map((k) => TUNE.zones.types[k].short).join(' → ');
-if (dayRec.streak >= 2) {
-  el.streak.textContent = 'Day ' + dayRec.streak + ' in a row';
-  el.streak.classList.remove('hidden');
+// The title shows today's islands, today's stamp, and a quiet streak badge from day 2 on
+function refreshDaily() {
+  const names = DAY_SET.map((k) => TUNE.zones.types[k].short).join(' · ');
+  el.dailyMenu.innerHTML = '<small>Today’s islands</small>' + escapeHtml(names) +
+    '<span class="stamp' + (dayRec.stamped ? ' done' : '') + '">' +
+    (dayRec.stamped ? '✓ Day stamped' : 'Reach island ' + STAMP_ISLAND + ' to stamp the day') + '</span>';
+  const n = dayRec.streak || 0;
+  el.streak.textContent = n + ' days in a row';
+  el.streak.classList.toggle('hidden', n < 2);
+}
+refreshDaily();
+function stampDay() {
+  if (dayRec.stamped) return false;
+  dayRec.stamped = true;
+  dayRec.streak = (dayRec.streak || 0) + 1;
+  saveDay();
+  refreshDaily();
+  return true;
 }
 
 // ----- Goals: three at a time; each one completed raises your multiplier for good -----
@@ -1567,8 +1650,8 @@ function goalDef(id) {
   endlessCache[id] = g;
   return g;
 }
-// A biome goal only gets dealt on a day whose tour reaches that biome early
-const goalFeasible = (id) => !goalDef(id).needs || TOUR.slice(0, 6).includes(goalDef(id).needs);
+// A biome goal only gets dealt on a day whose four islands include that biome
+const goalFeasible = (id) => !goalDef(id).needs || DAY_SET.includes(goalDef(id).needs);
 let goalsDone = 0;
 try { goalsDone = parseInt(localStorage.getItem('champlain_glider_goals') || '0', 10) || 0; } catch (e) {}
 const GOALSLOT_KEY = 'champlain_glider_goalslots';
@@ -1619,7 +1702,7 @@ function goalProgressText(id) {
   return Math.min(g.n, Math.floor(g.cur())).toLocaleString() + '/' + g.n.toLocaleString() + (g.unit || '');
 }
 function goalsHtml() {
-  return '<div>Goals · multiplier ×' + multNow() + '</div>' + goalState.slots.map((id, i) => {
+  return '<div>Goals · one per flight · multiplier ×' + multNow() + '</div>' + goalState.slots.map((id, i) => {
     const p = run.slotDone[i] ? 'new' : goalProgressText(id);
     return '<div class="gm">' + escapeHtml(goalDef(id).text) + (p ? ' · ' + p : '') + '</div>';
   }).join('');
@@ -1649,6 +1732,7 @@ function thrushUnlocked() { return goalsDone >= 5; }
 const owl = {
   x: 0, y: 0, vx: 0, vy: 0,
   grounded: false, angle: 0, wingT: 0, blink: 0, airTime: 0, squash: 0, chomp: 0, stun: 0,
+  airPress: false, wasHolding: false, upHold: 0, slamFloorT: 0,
 };
 let rivals = [];    // other birds flying the route alongside you (labelled by species, no fake players)
 const SPECIES = { cardinal: 'a cardinal', jay: 'a blue jay', owl: 'a snowy owl', thrush: 'a hermit thrush' };
@@ -1685,6 +1769,10 @@ const COACH_STORAGE_KEY = 'champlain_glider_coach_v2';
 const COACH_RELEASE_LEAD = 0.40;
 const COACH_PREVIEW = 1.50;
 const SKIPTIP_KEY = 'champlain_glider_skiptip';
+// The crest coach ("KEEP HOLDING" / "LET GO!") retires after your first two flights
+const CREST_RUNS_KEY = 'champlain_glider_crestruns';
+const CREST_COACH_RUNS = 2;
+let crestRuns = parseInt(storageGet(CREST_RUNS_KEY, '0'), 10) || 0;
 const coach = {
   cue: '', checkT: 0, releaseUntil: 0, relAimAt: 0, holdProgress: 0,
   firstRun: storageGet(COACH_STORAGE_KEY) !== '1', firstStage: 'downhill', doneUntil: 0,
@@ -1711,7 +1799,7 @@ function gradeRelease() {
 let camX = 0, camY = 0, zoom = 1, altSmoothed = 0, groundSm = 0, spdSmoothed = 0, gyCam = 0;
 let particles = [];
 let popups = [];
-let snowAcc = 0, trailAcc = 0, fireflyAcc = 0, sprayAcc = 0, lastPopT = -10;
+let snowAcc = 0, trailAcc = 0, fireflyAcc = 0, sprayAcc = 0, lastPopT = -10, lastPopupAt = -99;
 let shakeT = 0, shakeMag = 0, freezeT = 0;   // slam screenshake + hitstop
 let shOffX = 0, shOffY = 0;                  // per-frame shake offset applied in w2s
 let effectEpoch = 0, feverFlashTimer = 0, bestRainTimer = 0;
@@ -1741,6 +1829,7 @@ function reset() {
   owl.grounded = true;
   owl.angle = Math.atan2(s, 1);
   owl.wingT = 0; owl.blink = 0; owl.airTime = 0; owl.stun = 0;
+  owl.airPress = false; owl.wasHolding = false; owl.upHold = 0; owl.slamFloorT = 0;
 
   run.score = 0; run.boardScore = 0; run.combo = 0; run.fever = false; run.perfects = 0;
   run.duskX = owl.x - TUNE.dusk.startGap;
@@ -1752,7 +1841,9 @@ function reset() {
   run.champSeen = false; run.cloudsTouched = 0; run.maxCombo = 0;
   run.boostsUsed = 0; run.creemees = 0;
   run.rivalIn = 4 + Math.random() * 5;
+  run.rivalIsland = 0;
   run.racesWon = 0;
+  run.goalsThisRun = 0;
   run.skipChain = 0; run.skipBest = 0; run.skipsTotal = 0; run.thermals = 0; run.gorgeJumps = 0; run.inThermal = false;
   run.goalCool = 0; run.goalSeen = [0, 0, 0]; run.slotDone = [false, false, false]; run.tickAt = -9; run.dialTick = 0;
   hudMsg.queue = []; hudMsg.bannerUntil = 0; hudMsg.chipsUntil = 0;
@@ -1768,7 +1859,7 @@ function reset() {
   if (birdKind === 'thrush' && !thrushUnlocked()) birdKind = 'cardinal';
   refreshBirdChips();
 
-  camX = owl.x; camY = owl.y * 0.75; zoom = 1; altSmoothed = 0; groundSm = owl.y; lastPopT = -10;
+  camX = owl.x; camY = owl.y * 0.75; zoom = 1; altSmoothed = 0; groundSm = owl.y; lastPopT = -10; lastPopupAt = -99;
   spdSmoothed = TUNE.phys.startSpeed; gyCam = owl.y;
   particles = []; popups = [];
   snowAcc = 0; trailAcc = 0; fireflyAcc = 0; sprayAcc = 0;
@@ -1798,7 +1889,7 @@ function doBoost() {
   if (owl.grounded) { ny -= TUNE.boost.upKick / sp; const l = Math.hypot(nx, ny); nx /= l; ny /= l; owl.y -= 6; owl.grounded = false; }
   const sp2 = Math.min(sp + TUNE.boost.impulse, TUNE.phys.maxSpeed);
   owl.vx = sp2 * nx; owl.vy = sp2 * ny;
-  addPopup('BOOST!', owl.x, owl.y - 110, '#ffd76a', 34);
+  shakeT = Math.max(shakeT, 0.12); shakeMag = Math.max(shakeMag, 5);   // felt, not read
   for (let i = 0; i < 22; i++) {
     addParticle({
       x: owl.x - 10, y: owl.y, vx: -nx * (200 + Math.random() * 500) + (Math.random() - 0.5) * 200,
@@ -1928,10 +2019,13 @@ document.addEventListener('visibilitychange', () => {
 /* =====================================================================
    Effects
    ===================================================================== */
-// Text popups live in ONE lane above the bird: at most two at a time, newest
-// nearest the bird, always clamped inside the screen. (wx, wy are ignored.)
-function addPopup(text, wx, wy, color, size) {
-  while (popups.length >= 2) popups.shift();
+// Text popups live in ONE line above the bird: one at a time (the newest wins),
+// always clamped inside the screen, and hidden while a coach cue is up. (wx, wy are ignored.)
+function addPopup(text, wx, wy, color, size, minGap) {
+  // Routine feedback (minGap) only speaks when the line has been quiet that long; sound carries the rest
+  if (minGap && run.time - lastPopupAt < minGap && state === STATE.PLAY) return;
+  lastPopupAt = run.time;
+  while (popups.length >= 1) popups.shift();
   popups.push({ text, age: 0, life: 1.1, color: color || '#ffffff', size: size || 26, slot: -0.6 });
 }
 function addParticle(p) {
@@ -2002,11 +2096,13 @@ function handleLanding(slope, tx, ty, preVx, preVy) {
   // Fever widens the perfect window: flow-state landings come easier
   const alignNeed = run.fever ? Math.max(0.35, P.align - 0.15) : P.align;
 
-  if (holding && owl.stun <= 0 && slope > P.minSlope && align > alignNeed && speed > P.minSpeed) {
+  if (holding && owl.airPress && owl.stun <= 0 && slope > P.minSlope && align > alignNeed && speed > P.minSpeed) {
     // Perfect slide
     run.combo++;
     run.perfects++;
     run.maxCombo = Math.max(run.maxCombo, run.combo);
+    // One line of text at most: the chain counter under the score carries the
+    // count, so only the start of a chain, Fever, and every 5th slide get words
     if (!run.fever && run.combo >= P.feverAt) {
       run.fever = true;
       addPopup('FEVER!', owl.x, owl.y - 130, '#ffd76a', 40);
@@ -2014,6 +2110,8 @@ function handleLanding(slope, tx, ty, preVx, preVy) {
       sfxFever();
     } else {
       sfxPerfect();
+      if (run.combo === 1) addPopup('Perfect!', owl.x, owl.y - 90, '#ffffff', 28, 4);
+      else if (run.combo % 5 === 0) addPopup('Perfect! x' + run.combo, owl.x, owl.y - 90, '#ffd76a', 32);
     }
     run.boost = Math.min(1, run.boost + TUNE.boost.perfectFill);
     awardScore(P.bonus * run.combo);
@@ -2021,8 +2119,6 @@ function handleLanding(slope, tx, ty, preVx, preVy) {
     run.duskX -= push;
     const sp2 = Math.min(Math.hypot(owl.vx, owl.vy) * P.speedBoost + P.flatBoost, TUNE.phys.maxSpeed * (run.fever ? 1.08 : 1));
     owl.vx = sp2 * tx; owl.vy = sp2 * ty;
-    addPopup(run.fever ? 'Perfect! x' + run.combo : 'Perfect!' + (run.combo > 1 ? ' x' + run.combo : ''),
-      owl.x, owl.y - 90, run.fever ? '#ffd76a' : '#ffffff', run.fever ? 32 : 28);
     landingPuff(owl.x, owl.y + 10, 10, true);
     if (run.fever) {
       for (let i = 0; i < 14; i++) {
@@ -2034,16 +2130,16 @@ function handleLanding(slope, tx, ty, preVx, preVy) {
       }
     }
   } else {
-    // Missed the window: combo and Fever end
-    if (run.fever) addPopup('Fever over', owl.x, owl.y - 100, '#cfd6ff', 24);
+    // Missed the window: combo and Fever end (the FEVER line under the score just fades)
     run.combo = 0;
     run.fever = false;
     if (align < P.slamAlign) {
       // A hard slam: speed lost, a beat of stun, and the camera flinches
       owl.vx *= P.slamPenalty; owl.vy *= P.slamPenalty;
       owl.stun = P.slamStun;
+      owl.slamFloorT = P.slamFloorT;
       shakeT = 0.28; shakeMag = 10; freezeT = 0.055;
-      addPopup('Slam!', owl.x, owl.y - 90, '#ffb3a0', 26);
+      addPopup('Slam!', owl.x, owl.y - 90, '#ffb3a0', 26, 3);
       landingPuff(owl.x, owl.y + 10, 14, true);
     } else {
       landingPuff(owl.x, owl.y + 10, 5, false);
@@ -2119,6 +2215,9 @@ function rivalPhysStep(rv, dt) {
 }
 
 function physStep(dt) {
+  // A dive that starts in the air (a fresh press after takeoff) is what earns a Perfect
+  if (holding && !owl.wasHolding && !owl.grounded) owl.airPress = true;
+  owl.wasHolding = holding;
   // A slam briefly knocks the dive out of your hands
   const eff = holding && owl.stun <= 0;
   const g = eff ? diveG(owl.vx) : TUNE.phys.gravity;
@@ -2202,11 +2301,10 @@ function physStep(dt) {
       }
       // Splashdown: no scoring, combo ends, drag toward the shore
       if (wasAir && owl.airTime >= TUNE.perfect.graceAir) {
-        if (run.fever) addPopup('Fever over', owl.x, owl.y - 130, '#cfd6ff', 24);
         run.combo = 0;
         run.fever = false;
         run.skipChain = 0;
-        addPopup('Splash!', owl.x, owl.y - 90, '#bfe2ff', 26);
+        addPopup('Splash!', owl.x, owl.y - 90, '#bfe2ff', 26, 3);
         for (let i = 0; i < 14; i++) {
           addParticle({
             x: owl.x + (Math.random() - 0.5) * 26, y: owl.y + 4,
@@ -2238,7 +2336,13 @@ function physStep(dt) {
       // Ground friction and stall guard (the frozen lake has none at all)
       const f = 1 - TUNE.phys.groundFriction * (run.zoneType === 'lake' ? 0 : 1) * dt;
       owl.vx *= f; owl.vy *= f;
-      const minG = ramp ? TUNE.islands.rampMinSpeed : TUNE.phys.minGroundSpeed;
+      // Holding all the way up a hill bleeds speed: the climb is where you let go
+      const P = TUNE.perfect;
+      if (holding && !ramp && s < -0.03 && !(coach.firstRun && crestRuns === 0)) {   // (never during your very first lesson)
+        owl.upHold += dt;
+        if (owl.upHold > P.uphillGrace) { const fb = 1 - P.uphillBleed * dt; owl.vx *= fb; owl.vy *= fb; }
+      } else owl.upHold = 0;
+      const minG = Math.max(ramp ? TUNE.islands.rampMinSpeed : TUNE.phys.minGroundSpeed, owl.slamFloorT > 0 ? P.slamFloor : 0);
       let gsp = Math.hypot(owl.vx, owl.vy) * Math.sign(owl.vx || 1);
       if (gsp < minG) {
         owl.vx = minG * tx;
@@ -2247,14 +2351,17 @@ function physStep(dt) {
     }
   } else {
     // Launches are purely ballistic: you fly with exactly what you carried.
-    // Leaving the ground with real upward speed is a Clean Launch and scores.
+    // Leaving the ground with real upward speed is a Clean Launch and scores
+    // (quietly: a sound and the points, no text).
     if (owl.grounded && owl.stun <= 0 && -owl.vy > TUNE.perfect.launchVy && run.time - lastPopT > 1.0) {
       lastPopT = run.time;
-      const awarded = awardScore(TUNE.perfect.launchBonus);
+      awardScore(TUNE.perfect.launchBonus);
       run.boost = Math.min(1, run.boost + 0.05);
-      addPopup('Clean launch! +' + awarded, owl.x, owl.y - 120, '#d8f2ff', 24);
       if (Math.hypot(owl.vx, owl.vy) > 1100) sfxWhee();
     }
+    // Taking off still holding means this flight has no fresh dive yet
+    if (owl.grounded) owl.airPress = false;
+    owl.upHold = 0;
     owl.grounded = false;
     owl.airTime += dt;
   }
@@ -2272,6 +2379,7 @@ function update(dt) {
       for (let i = 0; i < sub; i++) physStep(dt / sub);
     }
     owl.stun = Math.max(0, owl.stun - dt);
+    owl.slamFloorT = Math.max(0, owl.slamFloorT - dt);
 
     // The first visit coaches one complete hill. Later runs stay quiet until
     // the bird is already climbing, then show the compact crest timing cue.
@@ -2297,7 +2405,7 @@ function update(dt) {
         storageSet(SKIPTIP_KEY, '1');
         coach.cue = '';
       } else {
-        const eligible = holding && owl.grounded && owl.stun <= 0 && !terrain.isWater(owl.x) && !terrain.isRamp(owl.x);
+        const eligible = crestRuns < CREST_COACH_RUNS && holding && owl.grounded && owl.stun <= 0 && !terrain.isWater(owl.x) && !terrain.isRamp(owl.x);
         if (eligible) {
           const spd = Math.max(300, Math.hypot(owl.vx, owl.vy));
           let sawUphill = currentSlope < -0.06;
@@ -2392,7 +2500,10 @@ function update(dt) {
     // so a big launch never feels like it summons the dark
     const altDusk = Math.max(0, terrain.heightAt(owl.x) - owl.y);
     const airSafety = lerp(1, 0.5, clamp(altDusk / 1200, 0, 1));
-    run.duskX += run.duskV * damp * airSafety * dt;
+    // A big lead keeps moving: past leashFrom the night closes faster the further
+    // ahead you are, so the lead drifts back toward a working distance you can see
+    const leash = TUNE.dusk.leash * Math.max(0, gapPre - TUNE.dusk.leashFrom);
+    run.duskX += (run.duskV * damp + leash) * airSafety * dt;
     if (owl.x - run.duskX > TUNE.dusk.maxGap) run.duskX = owl.x - TUNE.dusk.maxGap;
     const gap = owl.x - run.duskX;
     const darkTarget = clamp(1 - gap / TUNE.dusk.warnGap, 0, 0.82);
@@ -2413,6 +2524,10 @@ function update(dt) {
         showBanner(m.name, 'Night quickens', 2.8);
         sfxTick();
         run.dialTick = 1;
+        if (run.islandNow >= STAMP_ISLAND && stampDay()) {
+          showBanner('✓ Day stamped', dayRec.streak >= 2 ? dayRec.streak + ' days in a row' : 'Come back tomorrow for new islands', 2.6);
+          sfxGoal();
+        }
       }
     }
 
@@ -2421,7 +2536,7 @@ function update(dt) {
       run.inThermal.counted = true;
       run.thermals++;
       awardScore(80);
-      addPopup('Thermal!', owl.x, owl.y, '#ffc58a', 24);
+      addPopup('Thermal!', owl.x, owl.y, '#ffc58a', 24, 3);
       sfxWhee();
       for (let i = 0; i < 12; i++) {
         addParticle({
@@ -2509,9 +2624,9 @@ function update(dt) {
         if (cl.touched || Math.abs(cl.x - owl.x) > cl.w || Math.abs(cl.y - owl.y) > 70) continue;
         cl.touched = true;
         run.cloudsTouched++;
-        const cloudPoints = awardScore(50);
+        awardScore(50);
         run.boost = Math.min(1, run.boost + TUNE.boost.cloudFill);
-        addPopup('Cloud! +' + cloudPoints, owl.x, owl.y - 90, '#ffffff', 20);
+        sfxCloud();   // a soft puff, no text
       }
     }
 
@@ -2520,10 +2635,9 @@ function update(dt) {
       if (rg.hit || Math.abs(rg.x - owl.x) > 55 || Math.abs(rg.y - owl.y) > rg.r * 0.85) continue;
       rg.hit = true;
       owl.chomp = 0.6;
-      const hb = awardScore(150);
+      awardScore(150);
       run.boost = Math.min(1, run.boost + 0.12);
-      addPopup('Hoop! +' + hb, rg.x, rg.y - rg.r - 30, '#ffd76a', 24);
-      sfxPerfect();
+      sfxHoop();   // a bright chime and a gold burst: no text needed
       for (let i = 0; i < 12; i++) {
         const a = (i / 12) * 6.2832;
         addParticle({ x: rg.x, y: rg.y + Math.sin(a) * rg.r * 0.7, vx: owl.vx * 0.2, vy: Math.sin(a) * 200, life: 0.5, age: 0, size: 2.5, color: '255,205,90', grav: 0 });
@@ -2539,7 +2653,7 @@ function update(dt) {
       owl.vy = -Math.max(820, Math.abs(owl.vy) * 0.45 + 620);
       owl.grounded = false;
       owl.squash = 1;
-      addPopup('Boing!', b.x, b.y - 140, '#ffffff', 28);
+      addPopup('Boing!', b.x, b.y - 140, '#ffffff', 28, 3);
       sfxWhee();
       landingPuff(b.x, b.y + 60, 8, true);
     }
@@ -2570,10 +2684,12 @@ function update(dt) {
     // Rivals: named birds fly the route with you for minutes at a time.
     // They hop hills, drift ahead and behind, chat, and eventually fall
     // to the night behind you, just like other players would.
+    // One rival per island at most, and never a bird of your own kind
     run.rivalIn -= dt;
-    if (run.rivalIn <= 0 && rivals.length < 2) {
+    if (run.rivalIn <= 0 && rivals.length < 1 && run.rivalIsland !== run.islandNow) {
       run.rivalIn = TUNE.rival.wait[0] + Math.random() * (TUNE.rival.wait[1] - TUNE.rival.wait[0]);
-      const kinds = ['cardinal', 'jay', 'owl'];
+      run.rivalIsland = run.islandNow;
+      const kinds = ['cardinal', 'jay', 'owl', 'thrush'].filter((k) => k !== birdKind);
       const fromBehind = Math.random() < 0.5;
       const spawnX = owl.x + (fromBehind ? -650 : 850);
       const spawnSlope = terrain.slopeAt(spawnX);
@@ -2617,7 +2733,8 @@ function update(dt) {
       const ahead = owl.x > rv.x;
       if (ahead !== rv.wasAhead) {
         rv.wasAhead = ahead;
-        if (ahead && run.time - rv.passAt > TUNE.rival.passCooldown) {
+        if (ahead && !rv.passed) {
+          rv.passed = true;   // one pass bonus per rival: no leapfrog spam
           rv.passAt = run.time;
           run.racesWon++;
           const pb = awardScore(TUNE.rival.passBonus);
@@ -2650,7 +2767,8 @@ function update(dt) {
 
     // Goals: three live at once. Finishing one raises the multiplier for good
     // and deals the next; progress ticks briefly as it moves.
-    for (let gi = 0; gi < goalState.slots.length && run.time >= run.goalCool; gi++) {
+    // At most ONE goal completes per run, so the multiplier and the Thrush take days, not minutes.
+    for (let gi = 0; gi < goalState.slots.length && run.time >= run.goalCool && run.goalsThisRun < 1; gi++) {
       if (run.slotDone[gi]) continue;
       const id = goalState.slots[gi], g = goalDef(id);
       const c = g.cur();
@@ -2662,6 +2780,7 @@ function update(dt) {
         goalState.slots[gi] = nextGoalId(others, !others.some((o) => goalDef(o).easy));
         try { localStorage.setItem(GOALSLOT_KEY, JSON.stringify(goalState)); } catch (e) {}
         run.slotDone[gi] = true;   // its replacement starts counting next run
+        run.goalsThisRun++;
         run.goalCool = run.time + 2.4;
         run.tickAt = run.time;
         const lines = ['Goal! ' + g.text, 'Multiplier ×' + multNow()];
@@ -2912,11 +3031,13 @@ function gameOver() {
     } catch (e) {}
   }
   const dist = Math.max(0, Math.round((owl.x - run.startX) / 40));
-  // Today's tally: next run gets fresh hills on the same tour
+  if (crestRuns < CREST_COACH_RUNS) { crestRuns++; storageSet(CREST_RUNS_KEY, String(crestRuns)); }
+  // Today's tally: next run gets fresh hills and a fresh order of today's islands
   dayRec.runs = (dayRec.runs || 0) + 1;
   dayRec.best = Math.max(dayRec.best || 0, Math.floor(run.score));
   saveDay();
-  el.todayLine.textContent = 'Today ' + dayRec.best.toLocaleString() + '  ·  Best ' + best.toLocaleString();
+  el.todayLine.textContent = (dayRec.stamped ? '✓ Day stamped' : 'Island ' + STAMP_ISLAND + ' stamps the day') +
+    '  ·  Best ' + best.toLocaleString();
   tickerShow();
   el.overScore.innerHTML = Math.floor(run.score).toLocaleString() + ' <small>points</small>';
   // Postcard
@@ -2928,7 +3049,8 @@ function gameOver() {
   el.pcCombo.textContent = String(run.maxCombo);
   el.pcCoins.textContent = String(run.coinsGot);
   el.overBest.textContent = run.newBest ? 'New best!' : '';
-  el.overBoard.textContent = 'Board score ' + Math.floor(run.boardScore).toLocaleString();
+  // The monthly board ranks flights without the goal multiplier, so everyone races fairly
+  el.overBoard.textContent = 'Monthly board (no multiplier): this flight ' + Math.floor(run.boardScore).toLocaleString();
   el.goalOver.innerHTML = goalsHtml();
   el.over.classList.remove('hidden');
   if (run.newBest) {
@@ -2952,7 +3074,7 @@ function updateHud() {
   const feverOn = run.fever && state === STATE.PLAY;
   const comboTxt = state !== STATE.PLAY ? ''
     : feverOn ? 'FEVER ×2' + (run.combo > 3 ? '  ·  ' + run.combo : '')
-    : run.combo > 0 ? run.combo + ' in a row' : '';
+    : run.combo > 1 ? run.combo + ' in a row' : '';
   if (comboTxt !== lastCombo) {
     el.comboMsg.textContent = comboTxt;
     el.comboMsg.style.opacity = comboTxt ? '1' : '0';
@@ -3320,9 +3442,10 @@ function render() {
     ctx.fill();
   }
 
-  // ---- Hoops ----
+  // ---- Hoops (play pickups only: never behind the game-over text) ----
+  const pickupsOn = state !== STATE.OVER;
   for (const rg of terrain.rings) {
-    if (rg.hit) continue;
+    if (rg.hit || !pickupsOn) continue;
     const rx = w2sX(rg.x, scale), ry = w2sY(rg.y, scale);
     if (rx < -80 || rx > W + 80 || ry < -180 || ry > H + 180) continue;
     const rr = rg.r * scale;
@@ -3342,14 +3465,37 @@ function render() {
   }
 
   // ---- Stowe thermals: a column of swirling leaves ----
-  if (terrain.thermals.length) {
+  if (terrain.thermals.length && pickupsOn) {
     const T = TUNE.twists;
     for (const th of terrain.thermals) {
       const tx = w2sX(th.x, scale);
       if (tx < -200 || tx > W + 200) continue;
       const top = w2sY(th.gy - T.thermalH, scale), bot = w2sY(th.gy, scale);
       const hw = T.thermalW * scale / 2;
-      // a soft warm glow where the column rises from the ground, then the leaves do the talking
+      // The column itself: a soft pale band of warm air, readable from far off...
+      const band = ctx.createLinearGradient(tx - hw, 0, tx + hw, 0);
+      const ba = (0.26 * (1 - d * 0.5)).toFixed(3);
+      band.addColorStop(0, 'rgba(255,238,205,0)');
+      band.addColorStop(0.5, 'rgba(255,238,205,' + ba + ')');
+      band.addColorStop(1, 'rgba(255,238,205,0)');
+      ctx.fillStyle = band;
+      ctx.fillRect(tx - hw, top, hw * 2, bot - top);
+      // ...with rising chevrons drifting up it, so "this lifts you" reads in a still frame
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      const cw = hw * 0.42, chH = Math.max(6, 22 * scale), lw = Math.max(2.5, 5 * scale);
+      for (let k = 0; k < 6; k++) {
+        const ph = (run.time * 0.35 + k / 6 + th.seed) % 1;
+        const cy = lerp(bot - chH * 2, top + chH, ph);
+        ctx.globalAlpha = Math.min(1, ph * 5, (1 - ph) * 5) * (1 - d * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(tx - cw, cy + chH); ctx.lineTo(tx, cy); ctx.lineTo(tx + cw, cy + chH);
+        // a soft warm shadow under a cream stroke: reads on bright sky and dark ground alike
+        ctx.strokeStyle = 'rgba(150,70,30,0.45)'; ctx.lineWidth = lw + 3; ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,240,214,0.95)'; ctx.lineWidth = lw; ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      // a soft warm glow where the column rises from the ground, then the leaves swirl up it
       const gl = ctx.createRadialGradient(tx, bot, 0, tx, bot, hw * 2.2);
       gl.addColorStop(0, 'rgba(255,170,90,' + (0.28 * (1 - d * 0.6)).toFixed(3) + ')');
       gl.addColorStop(1, 'rgba(255,170,90,0)');
@@ -3370,7 +3516,7 @@ function render() {
 
   // ---- Maple coins (spinning) ----
   for (const c of terrain.coins) {
-    if (c.taken) continue;
+    if (c.taken || !pickupsOn) continue;
     const cx = w2sX(c.x, scale), cy = w2sY(c.y, scale);
     if (cx < -40 || cx > W + 40 || cy < -40 || cy > H + 40) continue;
     const spin = Math.cos(run.time * 5 + c.phase);
@@ -3459,8 +3605,8 @@ function render() {
   drawOwl(scale);
   drawCoach(scale);
 
-  // ---- Popups: one lane above the bird (above the coach when it is up) ----
-  if (popups.length) {
+  // ---- Popups: one line above the bird, never while a coach cue is up ----
+  if (popups.length && coachTopY == null) {
     const b = birdScreen(scale);
     // The lane grows up from just above the bird (and above the coach when it is up)...
     let base = (coachTopY != null && coachTopY < b.top ? coachTopY : b.top) - 12;
