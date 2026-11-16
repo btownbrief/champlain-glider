@@ -103,7 +103,6 @@
   .panel.hidden { display: none; }
   .panel h1 { font-size: clamp(30px, 8vh, 58px); font-weight: 900; letter-spacing: 1px; margin-bottom: 6px; }
   .panel h2 { font-size: clamp(24px, 6.5vh, 44px); font-weight: 900; margin-bottom: 10px; }
-  .panel .sub { font-size: clamp(14px, 3vh, 19px); opacity: .92; margin-bottom: 16px; font-weight: 600; color: #ffd9a0; }
   .panel .howto { font-size: clamp(15px, 3vh, 19px); font-weight: 700; opacity: .95; margin-bottom: 18px; }
   .panel .stats { font-size: clamp(16px, 3.4vh, 24px); font-weight: 700; margin-bottom: 6px; }
   .panel .stats small { font-weight: 600; opacity: .8; font-size: .75em; }
@@ -282,7 +281,6 @@
     .panel { padding: 5px 12px 10px; }
     .panel h1 { font-size: clamp(27px, 8vh, 38px); margin-bottom: 0; }
     .panel h2 { font-size: clamp(23px, 7vh, 32px); margin-bottom: 3px; }
-    .panel .sub { margin-bottom: 6px; }
     .panel .howto { margin-bottom: 7px; }
     #birdRow { gap: 7px; margin-bottom: 7px; }
     .birdChip { padding: 6px 12px; }
@@ -400,11 +398,11 @@ const TUNE = {
     camSmooth: 7,           // one smoothing rate for the whole camera position: no second channel to fight it
     zoomOutAtSpeed: 3400,   // speed at which camera reaches max zoom-out
     zoomMin: 0.84,          // max zoom-out factor from speed alone
-    zoomFloor: 0.42,        // the camera never zooms out past this: the bird stays readable
+    zoomFloor: 0.22,        // the camera may pull far out on big flights: the bird is drawn at birdMinScale anyway
     zoomLerp: 0.9,          // base zoom rate (per second); scales up gently only for big errors
     groundMargin: 0.94,     // keep the ground at or above this screen fraction...
     groundReleaseAlt: 2800, // ...until the owl flies this high, when the ground may dip slightly
-    groundFracFar: 1.15,    // the ground stays (almost) always in view: jumps need timing
+    groundFracFar: 1.02,    // the ground (your landing) stays in view, even on big flights
     owlTopMargin: 0.05,     // never push the owl above this screen fraction
     birdMinScale: 0.72,     // the bird is DRAWN at least this big, however far the camera pulls out
   },
@@ -428,24 +426,25 @@ const TUNE = {
     firstKeys: 22,          // island 1 is a short teacher: first ramp at about 300 m
     earlyKeys: [28, 36],    // islands 2-4 are short stages too...
     earlyIslands: 4,        // ...then the full-length islands take over
+    bigHillRamp: 6,         // islands over which big-hill biomes grow to their full height
     types: {
-      valley:  { w: 0.06, short: 'Valley', name: 'Champlain Valley',    ampMul: 0.75, spaceMul: 1.2,  drift: 0, len: [42, 56],
+      valley:  { w: 0.07, short: 'Valley', name: 'Champlain Valley',    ampMul: 0.75, spaceMul: 1.2,  drift: 0, len: [42, 56],
                  col: [[196, 214, 150], [124, 158, 112]] },
-      farms:   { w: 0.05, short: 'Intervale', name: 'The Intervale',       ampMul: 0.70, spaceMul: 1.25, drift: 0, rumble: true, len: [42, 56],
+      farms:   { w: 0.07, short: 'Intervale', name: 'The Intervale',       ampMul: 0.70, spaceMul: 1.25, drift: 0, rumble: true, len: [42, 56],
                  col: [[224, 202, 138], [164, 146, 96]] },
-      rolling: { w: 0.16, short: 'Sugarbush', name: 'Sugarbush Hills',     ampMul: 1.0,  spaceMul: 1.0,  drift: 0,
+      rolling: { w: 0.12, short: 'Sugarbush', name: 'Sugarbush Hills',     ampMul: 1.0,  spaceMul: 1.0,  drift: 0,
                  col: [[168, 198, 128], [104, 142, 96]] },
-      greens:  { w: 0.15, short: 'Green Mtns', name: 'Green Mountains',     ampMul: 1.4,  spaceMul: 1.2,  drift: 0,
+      greens:  { w: 0.12, short: 'Green Mtns', name: 'Green Mountains',     ampMul: 1.4,  spaceMul: 1.2,  drift: 0,
                  col: [[120, 156, 116], [66, 104, 84]] },
-      stowe:   { w: 0.10, short: 'Stowe', name: 'Stowe in October',    ampMul: 1.15, spaceMul: 1.05, drift: 0,
+      stowe:   { w: 0.14, short: 'Stowe', name: 'Stowe in October',    ampMul: 1.15, spaceMul: 1.05, drift: 0,
                  col: [[236, 172, 92], [178, 112, 66]] },
       kingdom: { w: 0.10, short: 'Kingdom', name: 'Northeast Kingdom',   ampMul: 1.35, spaceMul: 0.9,  drift: 0,
                  col: [[100, 130, 100], [54, 84, 68]] },
-      longrun: { w: 0.23, short: 'Long Trail', name: 'The Long Trail Down', ampMul: 0.55, spaceMul: 1.0,  drift: 85, len: [58, 78],
+      longrun: { w: 0.12, short: 'Long Trail', name: 'The Long Trail Down', ampMul: 0.55, spaceMul: 1.0,  drift: 85, len: [58, 78],
                  col: [[244, 246, 250], [188, 198, 218]] },
-      gorge:   { w: 0.09, short: 'Gorge', name: 'Quechee Gorge',       ampMul: 1.15, spaceMul: 1.0,  drift: 0,
+      gorge:   { w: 0.13, short: 'Gorge', name: 'Quechee Gorge',       ampMul: 1.15, spaceMul: 1.0,  drift: 0,
                  col: [[186, 178, 168], [126, 118, 114]] },
-      lake:    { w: 0.06, short: 'Ice', name: 'Champlain on Ice',    ampMul: 0.10, spaceMul: 1.5,  drift: 0, ice: true, len: [38, 50],
+      lake:    { w: 0.10, short: 'Ice', name: 'Champlain on Ice',    ampMul: 0.10, spaceMul: 1.5,  drift: 0, ice: true, len: [38, 50],
                  col: [[216, 236, 246], [148, 184, 212]] },
       // Not an island: the open water between islands (w: 0 = never picked)
       water:   { w: 0,    name: '',                    ampMul: 0,    spaceMul: 1,    drift: 0,
@@ -507,7 +506,6 @@ const TUNE = {
     sunX: 0.76,             // screen-space position keeps the sun calm and readable
     sunHighY: 0.24,         // daytime height; darkness lowers it toward the horizon
     champMeanWait: 16,      // Champ surfaces in the lake about this often (seconds)
-    travelerWait: [18, 40], // seconds between fellow birds passing through
     creemeeEvery: 44,       // a creemee stand roughly every N keypoints
     fireflyDark: 0.45,      // fireflies come out past this darkness
     fireflyRate: 9,         // fireflies per second when out
@@ -783,7 +781,9 @@ try { dayRec = JSON.parse(localStorage.getItem(DAY_KEY) || 'null'); } catch (e) 
 })();
 function saveDay() { try { localStorage.setItem(DAY_KEY, JSON.stringify(dayRec)); } catch (e) {} }
 function makeTour(n) {
-  const rand = mulberry32(daySeed * 7 + 13);
+  // Hash the date first: consecutive days must not share an opening
+  const rand = mulberry32(Math.imul(daySeed ^ 0x5bd1e995, 0x27d4eb2d) ^ (daySeed >>> 7));
+  rand(); rand();
   const types = TUNE.zones.types;
   const tour = ['rolling'];   // island 1 is always the gentle teacher
   while (tour.length < n) {
@@ -1210,7 +1210,10 @@ const terrain = {
     const flowStretch = clamp(0.85 + i * 0.006, 0.85, 1.35);
     const spacing = Math.min(TUNE.hill.spacing + i * TUNE.hill.spacingRamp, TUNE.hill.maxSpacing) * z.spaceMul * jit() * flowStretch;
     const warm = Math.min(1, i / TUNE.hill.warmupKeys);
-    const amp = Math.min(TUNE.hill.amp + i * TUNE.hill.ampRamp, TUNE.hill.maxAmp) * (0.4 + 0.6 * warm) * z.ampMul * jit() * Math.pow(flowStretch, 0.7);
+    // Big-hill islands (Green Mountains, Kingdom, Gorge) grow into their full size
+    // over the first islands, so an early draw is a taste, not a wall
+    const ampMul = z.ampMul > 1 ? 1 + (z.ampMul - 1) * clamp((this.islandIdx - 1) / TUNE.zones.bigHillRamp, 0, 1) : z.ampMul;
+    const amp = Math.min(TUNE.hill.amp + i * TUNE.hill.ampRamp, TUNE.hill.maxAmp) * (0.4 + 0.6 * warm) * ampMul * jit() * Math.pow(flowStretch, 0.7);
     this.baseline += z.drift + TUNE.hill.globalDrift;
 
     const IS = TUNE.islands;
@@ -1482,7 +1485,7 @@ let resumeState = null;
 let holding = false;
 let introSeen = false, introT = 0;
 let deathT = 0;
-let lastHudScore = -1, lastHudBest = -1, lastCombo = null, lastFever = null, lastWarn = null, lastChips = null, lastBoostPct = -1, lastMult = -1;
+let lastHudScore = -1, lastHudBest = -1, lastCombo = null, lastFever = null, lastBanner = null, lastChips = null, lastBoostPct = -1, lastMult = -1;
 
 let best = 0;
 try { best = parseInt(localStorage.getItem('champlain_glider_best') || '0', 10) || 0; } catch (e) { best = 0; }
@@ -1669,6 +1672,7 @@ function showChips(lines, secs, gold) {
   hudMsg.chipsUntil = run.time + secs;
   hudMsg.chipsGold = !!gold;
   el.chips.innerHTML = hudMsg.chipsHtml;
+  hudMsg.dirty = true;
 }
 // The versioned first-run cue teaches the complete first-hill rhythm. After
 // that, the quieter crest coach only appears when a player is already holding.
@@ -2279,16 +2283,14 @@ function update(dt) {
         coach.holdProgress = holding ? 1 : 0.16;
       } else if (run.time < coach.doneUntil) {
         coach.cue = 'firstDone';
-      } else if (!coach.skipTipSeen && (coach.cue === 'skipTip' || waterAhead())) {
-        // Shown once ever, from just before the first crossing until you are back on land
-        if (coach.skipTipShown && owl.grounded && !terrain.isWater(owl.x) && !waterAhead()) {
-          coach.skipTipSeen = true;
-          storageSet(SKIPTIP_KEY, '1');
-          coach.cue = '';
-        } else {
-          coach.cue = 'skipTip';
-          coach.skipTipShown = true;
-        }
+      } else if (!coach.skipTipSeen && waterAhead()) {
+        // Shown once ever: from just before the first crossing until the water is behind you
+        coach.cue = 'skipTip';
+        coach.skipTipShown = true;
+      } else if (coach.cue === 'skipTip' || (coach.skipTipShown && !coach.skipTipSeen)) {
+        coach.skipTipSeen = true;
+        storageSet(SKIPTIP_KEY, '1');
+        coach.cue = '';
       } else {
         const eligible = holding && owl.grounded && owl.stun <= 0 && !terrain.isWater(owl.x) && !terrain.isRamp(owl.x);
         if (eligible) {
@@ -2728,12 +2730,12 @@ function update(dt) {
     // The current frame remains visible under the pause veil.
   } else if (state === STATE.INTRO) {
     // Dawn breaks over the nest; the bird blinks awake and the run begins
-    // A short wake-up (0.8 s): blink, stretch, go
+    // A short wake-up (0.65 s): blink, stretch, go
     introT += dt;
-    run.darkness = Math.max(0, 0.45 * (1 - introT / 0.7));
-    owl.blink = introT < 0.35 ? 0.2 : 0;
-    if (introT > 0.55 && introT < 0.6) owl.squash = 0.7;
-    if (introT >= 0.8) startPlay();
+    run.darkness = Math.max(0, 0.45 * (1 - introT / 0.55));
+    owl.blink = introT < 0.3 ? 0.2 : 0;
+    if (introT > 0.42 && introT < 0.47) owl.squash = 0.7;
+    if (introT >= 0.65) startPlay();
   } else {
     // Menu: gentle idle drift of the scene
     run.darkness = 0.06 + 0.03 * Math.sin(run.time * 0.6);
@@ -2959,11 +2961,16 @@ function updateHud() {
     el.bannerMain.textContent = m.main;
     el.bannerSub.textContent = m.sub;
     hudMsg.bannerUntil = run.time + m.secs;
+    hudMsg.dirty = true;
   }
   const bannerOn = playing && run.time < hudMsg.bannerUntil;
-  if (bannerOn !== lastWarn) { el.banner.classList.toggle('show', bannerOn); lastWarn = bannerOn; }
   const chipsOn = playing && run.time < hudMsg.chipsUntil;
-  if (chipsOn !== lastChips) { el.chips.classList.toggle('show', chipsOn); lastChips = chipsOn; }
+  if (bannerOn !== lastBanner || chipsOn !== lastChips || hudMsg.dirty) {
+    el.banner.classList.toggle('show', bannerOn); lastBanner = bannerOn;
+    el.chips.classList.toggle('show', chipsOn); lastChips = chipsOn;
+    hudMsg.dirty = false;
+    refreshTextTop();
+  }
   const bPct = Math.round(run.boost * 100);
   if (bPct !== lastBoostPct) {
     el.boostFill.style.width = bPct + '%';
@@ -3337,14 +3344,14 @@ function render() {
       if (tx < -200 || tx > W + 200) continue;
       const top = w2sY(th.gy - T.thermalH, scale), bot = w2sY(th.gy, scale);
       const hw = T.thermalW * scale / 2;
-      const col = ctx.createLinearGradient(0, top, 0, bot);
-      col.addColorStop(0, 'rgba(255,190,120,0)');
-      col.addColorStop(0.6, 'rgba(255,190,120,' + (0.10 * (1 - d * 0.6)).toFixed(3) + ')');
-      col.addColorStop(1, 'rgba(255,170,90,' + (0.20 * (1 - d * 0.6)).toFixed(3) + ')');
-      ctx.fillStyle = col;
-      ctx.fillRect(tx - hw, top, hw * 2, bot - top);
-      for (let k = 0; k < 14; k++) {
-        const ph = (run.time * 0.45 + k / 14 + th.seed) % 1;
+      // a soft warm glow where the column rises from the ground, then the leaves do the talking
+      const gl = ctx.createRadialGradient(tx, bot, 0, tx, bot, hw * 2.2);
+      gl.addColorStop(0, 'rgba(255,170,90,' + (0.28 * (1 - d * 0.6)).toFixed(3) + ')');
+      gl.addColorStop(1, 'rgba(255,170,90,0)');
+      ctx.fillStyle = gl;
+      ctx.fillRect(tx - hw * 2.2, bot - hw * 2.2, hw * 4.4, hw * 2.2);
+      for (let k = 0; k < 22; k++) {
+        const ph = (run.time * 0.45 + k / 22 + th.seed) % 1;
         const ly = lerp(bot, top, ph);
         const lx = tx + Math.sin(ph * 14 + k * 1.7 + run.time * 2.2) * hw * 0.8;
         const ls = Math.max(2.5, 9 * scale) * (1 - ph * 0.4);
@@ -3450,7 +3457,14 @@ function render() {
   // ---- Popups: one lane above the bird (above the coach when it is up) ----
   if (popups.length) {
     const b = birdScreen(scale);
-    const base = Math.max(40, (coachTopY != null ? Math.min(coachTopY, b.top) : b.top) - 12);
+    // The lane grows up from just above the bird (and above the coach when it is up)...
+    let base = (coachTopY != null && coachTopY < b.top ? coachTopY : b.top) - 12;
+    let dir = -1;
+    // ...unless that would reach the score row: then it hangs below the bird (and coach)
+    if (base - 2 * 34 - 26 < TEXT_TOP) {
+      dir = 1;
+      base = Math.max(TEXT_TOP + 24, Math.max(b.bottom, coachBotY != null && coachBotY > b.top ? coachBotY : -1e9) + 30);
+    }
     ctx.textAlign = 'center';
     ctx.lineJoin = 'round';
     for (let i = popups.length - 1, slot = 0; i >= 0; i--, slot++) {
@@ -3458,7 +3472,7 @@ function render() {
       const t = p.age / p.life;
       const px = Math.round(clamp(p.size * 0.72, 14, 28));
       p.slot += (slot - p.slot) * 0.25;
-      const y = base - p.slot * (px + 10) - (1 - Math.pow(1 - t, 2)) * 26;
+      const y = base + dir * p.slot * (px + 10) - (1 - Math.pow(1 - t, 2)) * (dir < 0 ? 26 : 10);
       ctx.font = '800 ' + px + 'px -apple-system, "Segoe UI", sans-serif';
       const hw = ctx.measureText(p.text).width / 2;
       const x = clamp(b.sx, 12 + hw, W - 12 - hw);
@@ -3493,12 +3507,18 @@ function render() {
     const gapV = owl.x - run.duskX;
     const k = clamp(1 - gapV / TUNE.dusk.vignetteGap, 0, 1);
     if (k > 0.01) {
-      const vw = lerp(0, 0.22 * W, k) + 24 * k;
+      const vw = lerp(0, 0.3 * W, k) + 30 * k;
       const v = ctx.createLinearGradient(0, 0, vw, 0);
-      v.addColorStop(0, 'rgba(7,6,28,' + (0.55 + 0.4 * k).toFixed(3) + ')');
+      v.addColorStop(0, 'rgba(7,6,28,' + (0.6 + 0.38 * k).toFixed(3) + ')');
+      v.addColorStop(0.55, 'rgba(14,10,44,' + (0.35 * k).toFixed(3) + ')');
       v.addColorStop(1, 'rgba(7,6,28,0)');
       ctx.fillStyle = v;
       ctx.fillRect(0, 0, vw, H);
+      // a faint violet front, breathing faster as it gets close
+      ctx.globalAlpha = k * (0.25 + 0.2 * Math.sin(run.time * (4 + 6 * k)));
+      ctx.fillStyle = 'rgb(140,110,235)';
+      ctx.fillRect(vw * 0.42, 0, 2, H);
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -3563,17 +3583,21 @@ function drawNightDial() {
 
 // One continuous crest cue: a non-numeric hold bar that becomes LET GO.
 // The whole block sits above the bird and is clamped inside the screen edges.
-let coachTopY = null;
+let coachTopY = null, coachBotY = null;
 const COACH_BLOCK = {          // [top, bottom] of each cue's drawing, relative to its anchor
   firstHold: [-17, 27], firstRelease: [-38, 64], firstDone: [-14, 8], holding: [-21, 22], release: [-34, 56], skipTip: [-17, 26],
 };
 function drawCoach(scale) {
-  coachTopY = null;
+  coachTopY = null; coachBotY = null;
   const blk = COACH_BLOCK[coach.cue];
   if (!blk || state !== STATE.PLAY) return;
   const b = birdScreen(scale);
-  const sy = Math.max(-blk[0] + 8, b.top - 10 - blk[1]);
+  // Above the bird when there is room; otherwise just under it
+  let sy = b.top - 10 - blk[1];
+  if (sy + blk[0] < TEXT_TOP) sy = b.bottom + 12 - blk[0];
+  if (sy + blk[0] < TEXT_TOP) return;   // no clean spot this frame (bird at the very top): skip it
   coachTopY = sy + blk[0];
+  coachBotY = sy + blk[1];
   const gold = '#ffd76a', ice = '#aef0ff';
   ctx.save();
   ctx.textAlign = 'center';
@@ -3960,7 +3984,18 @@ function birdScreen(scale) {
   const bs = birdScale(scale);
   const sx = w2sX(owl.x, scale);
   const sy = w2sY(owl.y, scale) - TUNE.owl.radius * 0.8 * bs;
-  return { sx, sy, bs, top: sy - TUNE.owl.radius * 1.5 * bs };
+  return { sx, sy, bs, top: sy - TUNE.owl.radius * 1.5 * bs, bottom: sy + TUNE.owl.radius * 1.1 * bs };
+}
+// Text near the bird never climbs into the score row or the banner/chips slot:
+// above this line it flips under the bird instead (updated as the HUD changes)
+let TEXT_TOP = 74;
+function refreshTextTop() {
+  let t = 74;
+  try {
+    if (el.banner.classList.contains('show')) t = Math.max(t, el.banner.getBoundingClientRect().bottom + 10);
+    if (el.chips.classList.contains('show')) t = Math.max(t, el.chips.getBoundingClientRect().bottom + 10);
+  } catch (e) {}
+  TEXT_TOP = t;
 }
 function drawOwl(scale) {
   const r = TUNE.owl.radius;
