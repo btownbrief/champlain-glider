@@ -441,11 +441,11 @@ const TUNE = {
       kingdom: { w: 0.10, short: 'Kingdom', name: 'Northeast Kingdom',   ampMul: 1.35, spaceMul: 0.9,  drift: 0,
                  col: [[100, 130, 100], [54, 84, 68]] },
       longrun: { w: 0.12, short: 'Long Trail', name: 'The Long Trail Down', ampMul: 0.55, spaceMul: 1.0,  drift: 85, len: [58, 78],
-                 col: [[244, 246, 250], [188, 198, 218]] },
+                 col: [[248, 244, 240], [214, 200, 206]] },
       gorge:   { w: 0.13, short: 'Gorge', name: 'Quechee Gorge',       ampMul: 1.15, spaceMul: 1.0,  drift: 0,
                  col: [[186, 178, 168], [126, 118, 114]] },
       lake:    { w: 0.10, short: 'Ice', name: 'Champlain on Ice',    ampMul: 0.10, spaceMul: 1.5,  drift: 0, ice: true, len: [38, 50],
-                 col: [[216, 236, 246], [148, 184, 212]] },
+                 col: [[234, 243, 248], [188, 208, 222]] },
       // Not an island: the open water between islands (w: 0 = never picked)
       water:   { w: 0,    name: '',                    ampMul: 0,    spaceMul: 1,    drift: 0,
                  col: [[110, 156, 196], [58, 96, 150]] },
@@ -596,11 +596,11 @@ const TUNE = {
   // ----- Dusk chase (simplified night mechanic) -----
   dusk: {
     startGap: 2000,         // starting gap between owl and the night (px)
-    baseSpeed: 850,         // the night's speed on island 1 (px/s)...
-    islandStep: 170,        // ...plus this much per island. Set by the island, never by your speed.
+    baseSpeed: 900,         // the night's speed on island 1 (px/s)...
+    islandStep: 190,        // ...plus this much per island. Set by the island, never by your speed.
     lateFrom: 6,            // from this island on it also quickens on a curve...
     lateRamp: 15,           // ...+ this * (islands past lateFrom)^2, so even a perfect run ends (about 4-6 min)
-    ease: 1.0,              // how fast it eases to a new island's pace (per second, ~3 s)
+    ease: 0.3,              // it eases into a new island's pace over ~10 s (deaths don't pile up at the shore)
     damping: 0.7,           // the night slows to this fraction as it closes in, so the
     dampGap: 1000,          //   almost-caught sweat lasts; full speed beyond this gap
     maxGap: 2600,           // a good stretch banks a lead you can spend on a mistake
@@ -1280,6 +1280,9 @@ const terrain = {
       const zn = TUNE.zones.types[this.zone.type];
       this.zoneMarks.push({ x: last.x + spacing * 0.35, name: 'Island ' + this.islandIdx + ' · ' + zn.name, type: this.zone.type, idx: this.islandIdx });
       y = this.baseline - amp * 0.7;
+      // The beach is a straight carry-up (like a ramp): a splash costs a lead, never a crawl
+      lin = true;
+      y = Math.max(y, last.y - sp * TUNE.hill.maxGrade);
       this.upNext = false; // just made a peak; a valley comes next
       this.phase = 'hills';
     } else {
@@ -1289,7 +1292,7 @@ const terrain = {
         // The landing pit after a jump hill: deep and wide, with a long
         // downslope to catch — the jump earns real air
         this.afterKick = false;
-        y = this.baseline + amp * (1.0 + 0.4 * this.rand());
+        y = this.baseline + amp * (0.75 + 0.3 * this.rand());   // deep enough for real air, not a pit you crawl out of
         sp = spacing * 1.3;
       } else if (this.rand() < TUNE.zones.plateauChance) {
         // Occasional plateau breaks the up-down rhythm
@@ -1412,8 +1415,10 @@ const terrain = {
   },
 
   // Ground colors at x: blends between zone palettes across boundaries
+  // (open water never tints the land: drawWater paints the water itself)
   palAt(x) {
-    const marks = this.zoneMarks;
+    const marks = this.zoneMarks.filter((m) => m.type !== 'water');
+    if (!marks.length) return TUNE.zones.types.rolling.col;
     let idx = 0;
     for (let m = marks.length - 1; m >= 0; m--) { if (marks[m].x <= x) { idx = m; break; } }
     const cur = TUNE.zones.types[marks[idx].type].col;
@@ -3243,7 +3248,7 @@ function render() {
   }
 
   // ---- Terrain: each island wears its own colors and pattern ----
-  const pal = terrain.palAt(camX);
+  const pal = terrain.palAt(camX + (W * 0.3) / scale);
   const hazeDay = [pal[1][0] * 0.35 + 236 * 0.65, pal[1][1] * 0.35 + 205 * 0.65, pal[1][2] * 0.35 + 168 * 0.65];
   // a soft far ridge in the local ground color, for depth
   drawMountains(0.42, horizon - H * 0.015, H * 0.09, mix([pal[1][0] * 0.6 + 100, pal[1][1] * 0.6 + 95, pal[1][2] * 0.6 + 110], [40, 40, 74], d), 2.4, horizon + H * 0.012);
@@ -3753,7 +3758,12 @@ function drawWater(gp, scale, d) {
   const marks = terrain.zoneMarks;
   const spans = [];
   for (let m = 0; m < marks.length; m++) {
-    if (marks[m].type === 'water') spans.push([marks[m].x, m + 1 < marks.length ? marks[m + 1].x : marks[m].x + 8000]);
+    if (marks[m].type !== 'water') continue;
+    // the strait ends where the beach starts (its last water key), not at the next island's mark
+    const x0 = marks[m].x, xm = m + 1 < marks.length ? marks[m + 1].x : x0 + 8000;
+    let x1 = xm;
+    for (const k of terrain.keys) if (k.water && k.x > x0 && k.x <= xm) x1 = k.x;
+    spans.push([x0, x1]);
   }
   for (const rv of terrain.rivers) spans.push([rv.wx0 - 40, rv.wx1 + 40]);
   if (!spans.length) return;
