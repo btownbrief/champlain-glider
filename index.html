@@ -1703,7 +1703,9 @@ function goalProgressText(id) {
 }
 function goalsHtml() {
   return '<div>Goals · one per flight · multiplier ×' + multNow() + '</div>' + goalState.slots.map((id, i) => {
-    const p = run.slotDone[i] ? 'new' : goalProgressText(id);
+    // A goal met after this flight's one goal already landed does not count yet; say so instead of a bare "4/4"
+    const g = goalDef(id), met = run.goalsThisRun >= 1 && g.n > 1 && g.cur() >= g.n;
+    const p = run.slotDone[i] ? 'new' : met ? 'again next flight' : goalProgressText(id);
     return '<div class="gm">' + escapeHtml(goalDef(id).text) + (p ? ' · ' + p : '') + '</div>';
   }).join('');
 }
