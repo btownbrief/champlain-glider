@@ -1,6 +1,6 @@
 // Champlain Glider service worker: an app-shell fallback for navigations and
 // cache-first static assets. Bump this version whenever a release changes.
-const CACHE = 'champlain-glider-v3';
+const CACHE = 'champlain-glider-v4';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', (e) => {
