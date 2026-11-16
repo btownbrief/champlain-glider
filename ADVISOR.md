@@ -168,3 +168,49 @@ Expected result with these numbers: a 1,450 px/s beginner is outrun on island 4-
 8. **No overlap:** screenshots of title, early play, Fever and game over show no text touching other text or the screen edge.
 9. **Phone inputs:** fast repeated taps, a two-finger hold with one finger lifting, a finger sliding off the screen edge, and rotation mid-run all leave the bird controllable (never stuck diving).
 10. **Scores intact:** an existing `champlain_glider_best` still shows after the update; a finished run still calls `submit_score` with game `champlain-glider`; landscape and desktop (Space bar) still play.
+
+## Review after upgrade
+
+Written 2026-11-16 after playing branch `upgrade-2026-11-16` fresh as a 390x844 touch phone. Real CDP touches for about 14 minutes across four play styles (never lets go, rhythm tapper, casual with 240 ms lag, decent human), one landscape session, then fast-forward bots for 60+ more runs across four different days. Compared against the live site, which still shows only "Turn your phone sideways to glide". Screenshots and logs: `/tmp/upgrade-champlain-glider/review/`. Console: clean (only GoatCounter's localhost notice). Leaderboard calls still use `champlain-glider`. An old best still shows, and the streak badge read "Day 2 in a row" the next day.
+
+### Scores (before -> now)
+
+| | Before | Now | Why |
+|---|---|---|---|
+| Fun | 6 | 7.5 | The flying now lasts 90 to 150 s instead of 20, in portrait, with a big bright bird. The gorge is a real highlight. Held back by a chase you cannot feel (below). |
+| Difficulty curve | 3 | 6 | The 850 m wall is gone and better players do go further (tapper 79 s, lag human 144 s, near-perfect 231 s median). But never letting go lasts 116 s, longer than tapping, and death arrives as a 3 second ambush. |
+| Readability | 4 | 8 | Bird is never under 50 px, the ground is calm, the landing is in view. Loses points for text spam (35 to 53 popups a minute), an invisible thermal, and a rival bird of your own species and color. |
+| Taste / looks | 7 | 7.5 | Title is clean and the tour line is charming. Still noisy in play: three stacked text lines over the bird are common, "FEVER!" prints on top of "Perfect! x3", and a gameplay hoop is drawn through the game-over text. |
+| Phone feel | 2 | 8 | Portrait works, one touch starts, retry button is on screen without scrolling, touch never stuck in 14 minutes. Not yet seen on a real iPhone. |
+| Variety | 4 | 6.5 | Five or six biomes in a normal run, a new one about every 20 s. But the order is identical all day, today's tour has no twist island before island 9, and Ice is a flat line with nothing to do. |
+| Reason to return | 4 | 6 | Daily tour, today's best and a quiet streak badge all work. But the last bird unlocks by run 3 or 4, goals fall at 1 to 2 per run without trying, and the growing multiplier makes "New best!" automatic. |
+
+### What clearly improved
+
+- **Portrait plays.** This was the whole problem for the #2 game, and it is fixed. First touch has the bird under control in under a second.
+- **Readable at a glance.** Player, ground and next hill are obvious in both orientations. Landscape no longer has a 14 px bird.
+- **No more wall.** Every play style now sees 4 to 6 islands. No run in 60+ died at the first water.
+- **Quechee Gorge** looks and plays like a different game for 30 s: real chasms, a river, a clear "jump it" moment.
+- **Water** is now a beat, not a trap. Zero deaths in water in every log.
+- **Subtraction on the menus.** One line of rules, tour, one button. Fake usernames and chat are gone.
+- **Fresh hills every run, new tour every day**, old scores and keys untouched.
+
+### What is still weak or broken
+
+1. **The night is invisible, then instant.** Across 24 logged runs the night was within 1,500 px for only 1 to 13% of the run (typically 5%). The lead sits pinned at its 2,600 cap, then one stall on island 5 or later and you are dead 2.1 to 9.9 s later (typically about 3 s). The same slam on islands 1 to 3 costs nothing you can see. So there is no rising tension, and the death reads as sudden rather than earned. All four real-touch styles died between 88 and 115 s.
+2. **Holding forever is a winning strategy.** The never-let-go player has a 116 s median (real touch: 115 s, island 6) against 79 s for the tapper, and collects 16 to 33 "Perfect!" slides a run for doing nothing. The game's one skill is optional for the first two minutes.
+3. **Run 10 today is run 1 again.** Hills differ, but every run today is Sugarbush, Long Trail, Green Mtns, Ice, Intervale, in that order, ending on island 5 or 6. On day 5 all six runs ended on the same island.
+4. **The twists are easy to miss.** Today's tour has no Stowe or Gorge before island 9, so today's players never meet thermals or gorge jumps. When Stowe does appear, the thermal column cannot be seen in screenshots; only the word "Thermal!" tells you it happened.
+5. **Ice is dead air.** Flat ground means no dive and no soar. It runs 14 to 19 s normally and 32 to 49 s when it is long (day 5: a third of the run, 31 to 44% airborne against 70 to 85% elsewhere).
+6. **Text spam.** "Clean launch! +100" fires 13 to 43 times a run, "Passed a ...!" 6 to 19 times, plus Cloud, Hoop, Perfect, Slam, Boost, and the "LET GO!" / "KEEP HOLDING" coach, which still shows on every hill in later runs. That is a popup nearly every second.
+7. **Progress is spent in one sitting.** Six runs completed 6 to 9 goals; the Hermit Thrush (5 goals) unlocks by run 3 or 4 and nothing is left to earn. Meanwhile the multiplier inflates the score: on one day a 85 s run scored 45,000 and a later, shorter 75 s run scored 154,000. The game over then shows a second, smaller "Board score", which is confusing.
+8. **Small things.** In landscape a thumb tap at the lower middle of the title lands on "More games" and leaves the game (it happened to the test). A rival cardinal can fly next to the player's cardinal. A hoop is drawn through "Today · Best" on the game over.
+
+### Final punch list (ranked by impact)
+
+1. **Make the night a chase you can see and survive.** Raise `maxGap` from 2,600 to about 4,200 so good flying banks a lead that keeps moving, and raise island pace about 8 to 10% to pay for it. After a slam on land, floor the ground speed at about 1,000 px/s (the same fix already made for water; the 560 to 740 px/s crawl is what kills). Make the dark edge at least 12% of screen width once the gap is under 700. Targets: night within 1,500 px for 20 to 35% of a run; at least 6 s median from full lead to death; lag human still 90 to 180 s, near-perfect still 3.5 to 6 min.
+2. **Stop paying for holding forever.** A slide only counts as "Perfect" if the press began in the air during that flight (not held since before takeoff), and holding up a hill for more than about 0.4 s bleeds speed. Targets: never-let-go median under the tapper's and under 70 s, with 3 or fewer perfects a run; other profiles unchanged.
+3. **Shuffle the day, and promise a twist.** Keep the day's set of islands, but shuffle islands 2 to 4 each run and draw island 5 onward per run (still no back-to-back repeats). Every day's first four islands must include Stowe or Gorge. Title reads "Today's islands". Target: 10 runs on one day give at least 4 different island orders, and every one of the next 30 days has a twist island by island 4.
+4. **Fix the two flat twists.** Ice: cut its length to about 12 s (roughly 16 to 22 keys) and add 2 or 3 snowdrift kickers with a hoop above each, so there is something to time. Thermals: draw a clearly visible column (soft pale band plus rising leaf streaks) readable from 700 px away. Target: Ice never over 15 s and at least 55% airborne; a thermal is identifiable in a still screenshot.
+5. **Cut the text to one line.** Remove the "Clean launch" and "Cloud" popups (keep their sounds), limit rivals to one per island and never the player's own species, retire the crest coach after the first two runs, and fix "FEVER!" landing on "Perfect!". Target: 12 or fewer popups a minute and never more than one text line near the bird (plus the banner).
+6. **Give tomorrow something to earn.** At most one goal completed per run, so the multiplier and the Thrush take days, not minutes. Add one daily target: reach island 5 on today's tour to stamp the day (a check mark on the title's tour line; the streak counts stamped days). Show one headline number on the game over. Also move the credit links to the bottom edge, away from the start button, and stop drawing hoops behind the game-over text. Leaderboard id, `boardScore` submission and all existing storage keys stay exactly as they are.
